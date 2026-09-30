@@ -1,0 +1,5 @@
+include:
+  - net/compose.yml
+  - cloud/compose.yml
+  # - media/compose.yml   # opt-in: jellyfin + torrent
+  # - ml-laptop/compose.yml  # runs on the LAPTOP, not tvbox — see docs/06

@@ -1,0 +1,13 @@
+# Caddy is the only owner of :80/:443. Pi-hole web is on :8080.
+{
+  admin off
+}
+
+{$CADDY_DOMAIN} {
+  handle_path /pihole* {
+    reverse_proxy pihole:8080
+  }
+  handle {
+    respond "tvbox up. see :3000 homepage, :3001 kuma." 200
+  }
+}

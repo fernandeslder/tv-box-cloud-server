@@ -1,0 +1,28 @@
+# RUNS ON THE LAPTOP (12GB VRAM), NOT on tvbox. Connected via Tailscale.
+# In Immich Admin -> ML Settings add http://<laptop-tailnet>:3003 (versions must match tvbox).
+services:
+  immich-machine-learning:
+    image: ghcr.io/immich-app/immich-machine-learning:release-cuda
+    ports:
+      - "3003:3003"
+    volumes:
+      - model-cache:/cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  ollama:
+    image: ollama/ollama:cuda
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    # then: ollama pull moondream; ollama pull llava:7b
+
+volumes:
+  model-cache:
+  ollama:

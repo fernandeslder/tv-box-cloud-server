@@ -1,0 +1,73 @@
+services:
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    restart: unless-stopped
+    ports:
+      - "2283:2283"
+    volumes:
+      - ${STORAGE_ROOT:-/mnt/pool}/immich:/data
+      - ${CACHE_ROOT:-/mnt/cache}/immich-thumbs:/usr/src/app/upload/thumbs
+    env_file:
+      - .env.immich
+    depends_on:
+      - postgres
+      - redis
+
+  immich-machine-learning:
+    # CPU fallback on tvbox. Prefer remote CUDA on laptop (see ../ml-laptop).
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}
+    restart: unless-stopped
+    volumes:
+      - immich-model-cache:/cache
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    volumes:
+      - ${CACHE_ROOT:-/mnt/cache}/immich-pg:/var/lib/postgresql/data
+    env_file:
+      - .env.immich
+
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    volumes:
+      - ${CACHE_ROOT:-/mnt/cache}/immich-redis:/data
+
+  nextcloud:
+    image: nextcloud:stable-apache
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    volumes:
+      - ${STORAGE_ROOT:-/mnt/pool}/files:/var/www/html/data
+      - ./data/nextcloud:/var/www/html/config
+    depends_on:
+      - nextcloud-db
+
+  nextcloud-db:
+    image: mariadb:11
+    restart: unless-stopped
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    volumes:
+      - ${CACHE_ROOT:-/mnt/cache}/nextcloud-db:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${IMMICH_DB_PASSWORD:?set in .env}
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: ${IMMICH_DB_PASSWORD:?set in .env}
+
+  presidio-analyzer:
+    image: mcr.microsoft.com/presidio-analyzer:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5002:3000"
+
+  presidio-anonymizer:
+    image: mcr.microsoft.com/presidio-anonymizer:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5001:3000"
+
+volumes:
+  immich-model-cache:
