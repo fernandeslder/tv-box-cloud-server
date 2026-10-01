@@ -35,9 +35,19 @@ inbox/ --> ingest.sh: type-sort by MIME/extension --> Photos/ Documents/ Music/ 
 Priority ladder: **free local > self-hosted Legion > paid**. The router (`scripts/router.sh`, policy in `configs/router.conf`) enforces it per file:
 - `SECRET` verdict → **BLOCKED** from paid, always. Coded, not just policy.
 - `CLEAN` + confidence ≥ 70 → done locally, $0.
-- `CLEAN` + confidence < 70 → escalate **only the ~4KB text transcript** (never raw files/images) to the cheapest provider in order (Gemini Flash first), **only if** `PAID_ENABLED=true`, a key exists, and the monthly cap (`PAID_MONTHLY_CAP_USD`, default $2) isn't hit. Otherwise the job waits as `needs-paid`.
+- `CLEAN` + confidence < 70 → escalate **only the ~4KB text transcript** (never raw files/images) to the cheapest provider in order, **only if** `PAID_ENABLED=true`, a key exists, and the monthly cap (`PAID_MONTHLY_CAP_USD`, default $2) isn't hit. Otherwise the job waits as `needs-paid`.
 - Every escalation is booked in `.ai-queue/spend.log`; over budget → automatic DEFER. Paid off (default) → low-confidence CLEAN is accepted locally and logged.
 - Subcategorization beyond secrets (faces, scenery, doc topics): Legion free by default. Outside APIs only ever see clean-screened transcripts, only if you opt in.
+
+### Cheapest paid models (researched + verified Sep 2026, per-escalation ≈ 1000 in / 50 out)
+| # | Provider / model | In $/1M | Out $/1M | $/call | Free tier | Endpoint |
+|---|---|---|---|---|---|---|
+| 1 | **Groq `openai/gpt-oss-20b`** (default first) | 0.075 | 0.30 | **0.00009** | rate-limited free tier, no card | OpenAI-compatible ✓ |
+| 2 | **Gemini `gemini-2.5-flash-lite`** (fallback) | 0.10 | 0.40 | **0.00012** | generous AI Studio free tier | OpenAI-compatible ✓ |
+Also-rans: Mistral Ministral 3B ($0.10/$0.10), DeepSeek Flash ($0.15/$0.60 off-peak), Together/Fireworks small models ($0.02–0.07 in). Anthropic Haiku (~$0.00125/call) is 10x the price — never for this job. Rock-bottom OpenRouter routes ($0.01 in) exist but run through obscure resellers — rejected for reliability.
+- All providers speak OpenAI `/chat/completions`, so adding one = 3 lines in `configs/router.conf`, no code changes.
+- You opted into training-on-data terms, which unlocks the free tiers above as overflow: Groq free tier and Gemini AI Studio free tier can absorb escalations at $0 before paid billing even starts.
+- At ~$0.0001/call, the $2 default cap buys ~20,000 escalations/month. You will realistically spend $0.
 
 ## Offline Legion? (expected — it's a laptop)
 Uploads still land, sort, and stay visible. Docs get Tier 0 immediately; everything else waits as `pending-ai`, usable locally, excluded from offsite/cloud copy. Local USB restic backup includes all of it (never leaves the house). Queue drains when `legion-linux` or `legion-win` answers.

@@ -12,11 +12,21 @@ ROUTER_CONFIDENCE_MIN=70
 # Hard monthly ceiling (USD). Router refuses escalation past it; jobs wait as needs-paid.
 PAID_MONTHLY_CAP_USD=2.00
 
-# Cheapest-first order. Currently implemented: gemini. Add providers in scripts/router.sh.
-PAID_PROVIDER_ORDER="gemini"
-GEMINI_MODEL="gemini-2.0-flash"
-# Cost booked per escalation call (transcripts truncated to ~4KB by the router).
-PAID_EST_PER_CALL_USD=0.002
+# Cheapest-first order, verified Sep 2026 (see docs/06 for the price table).
+# All providers below speak OpenAI-compatible /chat/completions — one code path.
+PAID_PROVIDER_ORDER="groq gemini"
 
-# Provider keys (leave empty = that provider skipped):
+# 1) Groq gpt-oss-20b — $0.075 in / $0.30 out per 1M (~$0.00009 per escalation).
+#    Stable company, native OpenAI endpoint, rate-limited free tier (no card).
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_MODEL=openai/gpt-oss-20b
+GROQ_API_KEY=
+
+# 2) Gemini 2.5 Flash-Lite — $0.10 in / $0.40 out per 1M (~$0.00012 per escalation).
+#    Generous AI Studio free tier (free tier may train on data — you opted in).
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+GEMINI_MODEL=gemini-2.5-flash-lite
 GEMINI_API_KEY=
+
+# Cost booked per escalation call (transcripts truncated to ~4KB by the router).
+PAID_EST_PER_CALL_USD=0.0002
