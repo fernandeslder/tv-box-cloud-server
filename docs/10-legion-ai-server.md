@@ -34,7 +34,7 @@ Ollama env (both OSes): `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_KEEP_ALIVE=5m` —
 
 ## When the Legion is offline (expected — it's a laptop)
 Default-deny queue on the TV box (full design: `docs/06-ai-classification.md`, worker: `scripts/ai-queue.sh` every 5 min via `configs/systemd/ai-queue.*`):
-- Uploads land in `inbox/` → Tier 0 deterministic scan runs immediately (TV-box CPU, always available) → hit goes to `quarantine/`, clean goes to `files/` tagged `pending-ai`.
+- Uploads land in `inbox/` → Tier 0 deterministic scan runs immediately (TV-box CPU, always available) → hit goes to `private/`, clean goes to `files/` tagged `pending-ai`.
 - `pending-ai` files are fully usable locally but **excluded from offsite/cloud copy and enrichment** until screened. Local USB restic backup still includes them (never leaves the premises — fine).
 - When any Legion OS comes online, the worker drains the queue oldest-first (Tier-1 judge, Immich re-triggers its own ML automatically; keep the TV-box CPU ML container enabled so photos still get faces slowly with zero Legion).
 - Nothing to configure per boot — the worker probes `legion-linux` then `legion-win` and uses whichever answers.

@@ -3,7 +3,7 @@
 # Usage:
 #   ./scan-secrets.sh <file-or-dir>            # Tier 0: TruffleHog deterministic scan (CPU, ms)
 #   ./scan-secrets.sh --llm <text-file>        # Tier 1: "Jeff" judge on Legion via Ollama
-# Exit 0 = clean, 1 = secrets found (quarantine the file).
+# Exit 0 = clean, 1 = secrets found (route to private/), 2 = couldn't scan (stay queued).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -32,6 +32,7 @@ if [ "${1:-}" = "--llm" ]; then
 fi
 
 TARGET="${1:?usage: scan-secrets.sh <file-or-dir>}"
+command -v docker >/dev/null 2>&1 || { echo "scan-secrets: docker missing, Tier-0 unavailable" >&2; exit 2; }
 MOUNT="$(realpath "$TARGET")"
 # --no-verification: never phone providers to "verify" a live key.
 docker run --rm -v "$MOUNT:/scan:ro" trufflesecurity/trufflehog:latest \
