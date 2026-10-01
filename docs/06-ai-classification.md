@@ -1,53 +1,38 @@
-# 06 — AI Classification (free, offline-first)
+# 06 — Secrets Screening + OCR (local only, never cloud)
 
-## Principle
-Cheap local gate first, heavy GPU on laptop, cloud APIs never (or last + quarantined).
+Your threat model: **secret credentials only** (API keys, passwords, tokens, private keys). Not names/addresses — the models already have that kind of data and you don't care. Consequence: nothing flagged (or checkable) ever leaves your LAN, and the screening models all run on hardware you own.
 
 ```
-Immich upload --> local thumbs/EXIF --> Immich ML (remote CUDA) --> faces/CLIP/OCR
-  --> Presidio PII gate --> if sensitive: quarantine + local-only tag
-  --> else: optional Ollama caption --> Immich tags/auto-albums
-  --> else (user-approved only): cheap cloud enrichment
-Speed doesn't matter — box is always on, queue drains eventually.
+Any new file --> extract text (below) --> TIER 0 deterministic scan (tvbox CPU, ms)
+  --> HIT: quarantine + tag `has-secrets`, NEVER cloud, done
+  --> clean/ambiguous --> TIER 1 local LLM judge on Legion (seconds, optional/sampled)
+       --> HIT: quarantine + tag. Clean: eligible for normal pipeline.
 ```
 
-## Remote ML on laptop (12GB VRAM, 32GB RAM)
-Laptop compose (`docker/ml-laptop/compose.yml`, NOT on tvbox):
-```yaml
-services:
-  immich-machine-learning:
-    image: ghcr.io/immich-app/immich-machine-learning:release-cuda
-    ports: ["3003:3003"]
-    volumes: [model-cache:/cache]
-    deploy:
-      resources:
-        reservations:
-          devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
-  ollama:
-    image: ollama/ollama:cuda
-    ports: ["11434:11434"]
-    volumes: [ollama:/root/.ollama]
-    # ollama pull moondream; ollama pull llava:7b
+## Text extraction (TV box CPU — fast, free)
+- PDFs with text: `pdftotext` (`poppler-utils`, installed by `scripts/10-base.sh`).
+- Scans / image-only PDFs / screenshots: `tesseract` (same script installs it). Good enough for printed text, seconds per page on CPU.
+- Hard cases (handwriting, complex screenshot layouts): send the image to `moondream` on the Legion (see `docs/10`) and scan its transcript. Last resort, GPU seconds.
+
+## TIER 0 — deterministic secret scan (always on, TV box, milliseconds)
+**TruffleHog** (free, open-source, maintained) over the extracted text:
+```bash
+./scripts/scan-secrets.sh /mnt/pool/files/new-upload.pdf
 ```
-- Immich Admin → ML Settings → add `http://<laptop-tailnet>:3003`. Versions must match on both hosts. Bind to Tailscale only, never public (no auth on ML port).
-- VRAM fit: ViT-B-32 ~1GB (fast/good), SigLIP-SO400M ~4-5GB (best recall), nllb-clip multilingual ~3GB, buffalo_l/antelopev2 face ~1GB, moondream ~5GB, llava:7b ~8GB. All fit 12GB (not all at once — queue them).
-- Keep tvbox local `immich-machine-learning` (CPU) as fallback or remove to force remote.
+- Uses the `trufflesecurity/trufflehog` image, `--no-verification` (no network calls to "verify" keys — verification would phone home to providers, never do that with real secrets).
+- Catches AWS/GCP/GitHub/Stripe-style keys, private keys, high-entropy tokens, generic password assignments. Exit 1 = secrets found → file gets quarantined + tagged, excluded from any cloud backup/enrichment.
+- Gitleaks is a fine alternative with a bigger ruleset, but its licensing got awkward — TruffleHog stays free.
 
-## PII / sensitive-data gate (runs on tvbox, ~1-2GB RAM)
-```yaml
-services:
-  presidio-analyzer:
-    image: mcr.microsoft.com/presidio-analyzer:latest
-    ports: ["5002:3000"]  # internal only
-  presidio-anonymizer:
-    image: mcr.microsoft.com/presidio-anonymizer:latest
-    ports: ["5001:3000"]
-```
-Flow: Immich webhook / Paperless consume → OCR (DocTR/PaddleOCR CPU) → `presidio-analyzer:5002` → if score > threshold: quarantine + `local-only` tag, skip cloud. Alt tiny binary: `pii-guard` (Rust, 10x lighter). Images: `presidio-image-redactor`.
+## TIER 1 — the "Jeff" judge (Legion 7, local small LLM, seconds)
+For ambiguous Tier-0 output or file types regex can't judge (prose notes containing a pasted password, config files with odd formats):
+- Model: **`qwen2.5:3b-instruct` via Ollama** (the role you called "Jev/Jeff": cheap, local, ~2GB VRAM). Alternatives: `llama3.2:3b-instruct`. Any 3B instruct model works.
+- `scan-secrets.sh --llm` sends the **extracted text snippet** (never the original binary) to `http://<legion-tailnet-IP>:11434` with a fixed prompt: *"Does this text contain secret credentials (API keys, passwords, tokens, private keys)? Answer YES/NO + type."*
+- Fully local (Tailscale LAN). Sending credential-containing text to your own Legion is the entire point — it never goes to a third party.
+- Sample, don't exhaust: run Tier 1 on Tier-0 warnings + spot-checks. Tier 0 alone is enough for most files; speed doesn't matter (box is always on, queue drains).
 
-## Auto-organization (no manual folders)
-- Rely on Immich smart search (`beach sunset dog`), Persons, Map. Script Ollama captions → `PUT /albums` + `POST /tags` via Immich API.
-- Nextcloud Memories Recognize (~1.5GB models, needs 4GB RAM) is fallback for files only — worse than Immich, skip for photos.
+## Orchestration (why models don't fight over 12GB VRAM)
+They never co-run at full size: Ollama keeps max 1 model loaded with 5-min eviction (judge ↔ moondream swap automatically), Immich ML bulk photo jobs run overnight and get stopped before big doc-caption runs. Full policy + VRAM table: `docs/10-legion-ai-server.md`.
 
-## Cost
-$0. Everything above is offline. Optional fallback: rclone encrypted to B2/Storj, or Ente 10GB free for critical selects. Never send originals to Jina/cloud without passing the Presidio gate.
+## What NEVER happens
+- Secret-flagged files are never sent to any cloud API, never included in unencrypted cloud backup, never embedded for "cheap enrichment".
+- Presidio/PII stack from earlier drafts is dropped from the default path — it solved a problem you don't have. (Keep the compose entries only if you later want PII redaction for shared albums.)

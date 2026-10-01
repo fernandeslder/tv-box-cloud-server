@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# scan-secrets.sh — Tier 0/1 secrets screening for new files. Local only, never cloud.
+# Usage:
+#   ./scan-secrets.sh <file-or-dir>            # Tier 0: TruffleHog deterministic scan (CPU, ms)
+#   ./scan-secrets.sh --llm <text-file>        # Tier 1: "Jeff" judge on Legion via Ollama
+# Exit 0 = clean, 1 = secrets found (quarantine the file).
+set -euo pipefail
+cd "$(dirname "$0")"
+
+LEGION_OLLAMA="${LEGION_OLLAMA:-http://100.x.y.z:11434}"  # set your Legion tailnet IP
+JUDGE_MODEL="${JUDGE_MODEL:-qwen2.5:3b-instruct}"
+
+if [ "${1:-}" = "--llm" ]; then
+  FILE="${2:?usage: scan-secrets.sh --llm <text-file>}"
+  PROMPT="Does the following text contain secret credentials (API keys, passwords, auth tokens, private keys)? Reply with exactly YES <type> or NO. Text: $(head -c 6000 "$FILE")"
+  ANSWER=$(curl -s -m 120 "$LEGION_OLLAMA/api/generate" \
+    -d "$(python3 -c "import json,sys; print(json.dumps({'model': sys.argv[1], 'prompt': open(sys.argv[2]).read()[:6000], 'stream': False}))" "$JUDGE_MODEL" <(echo "$PROMPT"))" \
+    | python3 -c "import json,sys; print(json.load(sys.stdin).get('response',''))")
+  echo "$ANSWER"
+  echo "$ANSWER" | grep -qi '^YES' && exit 1 || exit 0
+fi
+
+TARGET="${1:?usage: scan-secrets.sh <file-or-dir>}"
+MOUNT="$(realpath "$TARGET")"
+# --no-verification: never phone providers to "verify" a live key.
+docker run --rm -v "$MOUNT:/scan:ro" trufflesecurity/trufflehog:latest \
+  filesystem /scan --no-verification --fail

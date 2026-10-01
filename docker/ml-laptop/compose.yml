@@ -1,7 +1,11 @@
-# RUNS ON THE LAPTOP (12GB VRAM), NOT on tvbox. Connected via Tailscale.
-# In Immich Admin -> ML Settings add http://<laptop-tailnet>:3003 (versions must match tvbox).
+# RUNS ON THE LEGION 7 (RTX 4080 12GB), NOT on tvbox. Connected via Tailscale.
+# Setup walkthrough: docs/10-legion-ai-server.md
+# GPU rule: one workload family at a time. Ollama side self-swaps
+# (OLLAMA_MAX_LOADED_MODELS=1 + KEEP_ALIVE); stop the photos profile
+# before huge doc-caption runs and restart after.
 services:
   immich-machine-learning:
+    profiles: ["photos"]
     image: ghcr.io/immich-app/immich-machine-learning:release-cuda
     ports:
       - "3003:3003"
@@ -15,13 +19,28 @@ services:
               count: 1
               capabilities: [gpu]
 
+  # Only needed if the Legion runs Linux. On stock Windows 11, use the
+  # native Ollama app instead (same models, same env vars) and skip this.
   ollama:
+    profiles: ["ollama"]
     image: ollama/ollama:cuda
     ports:
       - "11434:11434"
+    environment:
+      OLLAMA_KEEP_ALIVE: 5m
+      OLLAMA_MAX_LOADED_MODELS: 1
     volumes:
       - ollama:/root/.ollama
-    # then: ollama pull moondream; ollama pull llava:7b
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # then: ollama pull qwen2.5:3b-instruct  (secrets judge, "Jeff" role)
+    #       ollama pull moondream            (screenshot/vision OCR assist)
+    #       ollama pull llava:7b             (optional captions)
 
 volumes:
   model-cache:
