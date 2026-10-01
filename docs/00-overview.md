@@ -37,7 +37,7 @@ Remote: Tailscale Split-DNS --> Pi-hole tailnet IP --> Caddy. No port forwards.
 - Per-disk `ext4`. Pool via `mergerfs`: `/mnt/disk1 + /mnt/disk2 -> /mnt/pool`, `category.create=mfs,minfreespace=20G`.
 - SSD (`/mnt/cache`): Docker, Postgres, Redis, Immich thumbs/encoded-video, Nextcloud previews — this is what makes it feel instant.
 - HDD pool: Immich originals, Nextcloud data, Jellyfin media, backups staging.
-- Backup: nightly `restic` to USB + weekly `rclone` to B2/Storj (encrypted). SnapRAID only when you have 2 data disks + parity.
+- Backup: nightly `restic` to USB + optional paid offsite (B2/Storj, encrypted). SnapRAID only when you have 2 data disks + parity.
 
 ## Decisions locked
 1. Photos = **Immich** (best face/CLIP/search, native app, offline).
@@ -47,3 +47,8 @@ Remote: Tailscale Split-DNS --> Pi-hole tailnet IP --> Caddy. No port forwards.
 5. Moonlight client = **moonlight-qt**, host = **Sunshine** on gaming PC.
 6. Stremio v5 + **Torrentio** (`https://torrentio.strem.fun`) + optional Debrid.
 7. Proxy = **Caddy** (only owner of :80/:443). Pi-hole web remapped to :8080.
+
+## FOSS policy (everything free + open source by default, phone apps included)
+- Server: Ubuntu, CachyOS, Kodi, Immich, Nextcloud, Navidrome, Audiobookshelf, Jellyfin, Pi-hole, Unbound, Caddy, Tailscale-free-tier, Docker, Ollama (MIT code), TruffleHog, Tesseract, restic, rclone, mergerfs — all FOSS, $0.
+- Phone apps (all FOSS): **Immich** (photos), **Nextcloud** (files), **Kore** (Kodi remote), **KDE Connect** (keyboard/touchpad), **Tempo / Ultrasonic** (music), **Audiobookshelf app** (audiobooks), **Jellyfin mobile** (video).
+- Honest exceptions, all labeled where used: **NVIDIA driver blob** (free-of-charge, required for CUDA — Nouveau can't do compute), **Tailscale control plane** (proprietary; Headscale/WireGuard path documented in `docs/05`), **model weights** (`qwen2.5`, `moondream`, `llava` are open-weights, not OSI-approved licenses), **optional paid APIs** (Debrid, B2/Storj, Gemini — never required, always gated behind screening).

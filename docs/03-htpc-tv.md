@@ -18,8 +18,8 @@ sudo apt install -y hypnotix firefox mpv yt-dlp
 | Moonlight | **moonlight-qt** client; **Sunshine** on gaming PC | H.264/HEVC/AV1+HDR. Pair + Steam Big Picture as Sunshine app |
 | Browser | Firefox (VA-API on AMD works OOTB) + uBlock + SponsorBlock | `mpv.conf: hwdec=vaapi vo=gpu` |
 | IPTV | **IPTVnator** (M3U/Xtream/Stalker+EPG) > Hypnotix (`apt install hypnotix`) > Kodi IPTV Simple | Xtream provider needed for EPG/catchup |
-| Stremio+Torrentio | Stremio v5 + `https://torrentio.strem.fun/manifest.json` + external mpv | Add RealDebrid/Torbox in Torrentio for no-buffer |
-| Music | Spotube (no Premium needed) or Spotify | — |
+| Stremio+Torrentio | Stremio v5 + `https://torrentio.strem.fun/manifest.json` + external mpv | Free path = plain P2P. Debrid services (RealDebrid/Torbox) are paid + proprietary — optional only, never required |
+| Music | **Spotube** (open-source, no Premium needed) | Streams via YouTube sources; your own library lives in Navidrome (`docs/09`) |
 | Local lib | Kodi + optional Jellyfin server in Docker | Jellyfin Desktop 2.0 = Qt6+mpv client |
 
 `Torio` = **Torrentio** Stremio addon. No separate app.

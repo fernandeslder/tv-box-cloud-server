@@ -28,6 +28,7 @@ Do the `systemd-resolved` stub fix first (see `02-os-postinstall.md`).
 - Install on host (not in Compose): `tailscale up --accept-dns`. No router forwards.
 - Admin → DNS → Split DNS: `home.lan → 100.x.y.z` (Pi-hole tailnet IP).
 - Caddy binds LAN + tailnet. Don't use Tailscale Serve for throughput — Caddy `reverse_proxy` is ~5-10x faster.
+- FOSS note: Tailscale's client + coordination server are proprietary (free tier, zero config — the default here). Purist path: **Headscale** (FOSS coordination server, same clients join your own control plane, no Big-Tech login) or plain **WireGuard** (fully FOSS both ends, one config per device, more manual). Swap anytime — Caddy/Pi-hole don't care which VPN carries the packets.
 
 ## Companion services (all behind Caddy, all `restart: unless-stopped`)
 - **Dockge** (`:5001`) — Compose-native Docker mgmt, lighter than Portainer.

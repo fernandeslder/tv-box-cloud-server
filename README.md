@@ -55,3 +55,5 @@ backups/        # backup.sh + policy
 - `docs/10-legion-ai-server.md` — Legion 7 setup (do in parallel with TV box install)
 
 Status: **planning phase**. Nothing is installed by these docs alone. Run `scripts/install.sh` only on the flashed target.
+
+**FOSS policy:** everything default is free + open source, phone apps included — `docs/00-overview.md`, exceptions labeled in place.

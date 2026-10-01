@@ -27,7 +27,7 @@ UUID=<4TB-UUID>  /mnt/disk2 ext4 defaults,nofail,x-systemd.automount 0 2
 
 ## Backup (3-2-1)
 - Nightly `restic -r /mnt/usb/restic backup /mnt/pool --exclude thumbs`, `forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6`.
-- Weekly `restic copy` / `rclone sync` encrypted to B2/Storj (~$6/TB/mo). Test `restic mount` restore quarterly.
+- Weekly `restic copy` / `rclone sync` encrypted to B2/Storj (~$6/TB/mo, paid + proprietary APIs — optional). The free path is USB + second disk; offsite is a luxury, not a requirement. Test `restic mount` restore quarterly.
 - SnapRAID: skip now (4TB parity for 1TB data = wasteful). Add when you have 2 data disks + parity disk ≥ largest data disk.
 
 ## Order

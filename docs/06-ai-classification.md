@@ -31,8 +31,8 @@ inbox/ --> ingest.sh: type-sort by MIME/extension --> Photos/ Documents/ Music/ 
 - Vision: `moondream` transcribes screenshots/handwriting; its transcript goes through the same judge. Covers your screenshot-upload case with no extra tooling.
 - Orchestration (12GB VRAM): Ollama max-1-loaded + 5-min eviction swaps judge↔vision; Immich ML bulk jobs overnight. Full table in `docs/10`.
 
-## Enrichment of CLEAN files (optional, cheapest-first)
-Default is Legion (free): Immich search/faces, Ollama captions → Immich tags. If you outgrow that, cheapest outside options, **clean files only**:
+## Enrichment of CLEAN files (optional, outside APIs are proprietary — off by default)
+Default is Legion (free): Immich search/faces, Ollama captions → Immich tags. If you outgrow that, cheapest outside options, **clean files only** (all third-party + proprietary, enable consciously):
 1. **Google Gemini Flash** — generous free tier, good doc/image categorization.
 2. **Cloudflare Workers AI** — pay-per-use, cheap at low volume.
 3. **Jina embeddings/reader** — free tier, good for semantic file search.
