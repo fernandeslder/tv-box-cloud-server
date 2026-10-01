@@ -16,9 +16,41 @@ tags() {  # artist|album|title (empty fields allowed)
 }
 ARTIST="$(tags | grep -i '^artist=' | cut -d= -f2- | head -n1 || true)"
 ALBUM="$(tags | grep -i '^album=' | cut -d= -f2- | head -n1 || true)"
-if [ -z "$ARTIST" ]; then  # fallback: "Artist - Title.ext"
-  base="$(basename "$FILE")"; base="${base%.*}"
-  case "$base" in *" - "*) ARTIST="${base%% - *}";; *) ARTIST="Unknown Artist";; esac
+jev_split() {  # $1=basename-noext -> "ARTIST<TAB>TITLE" (Jev general-knowledge split)
+  local resp line
+  resp="$(EXISTING_ARTISTS="$(cd "$POOL/Music" 2>/dev/null && find . -maxdepth 1 -mindepth 1 -type d -printf '%f\n' 2>/dev/null | sort | head -n 30 | tr '\n' ',' | sed 's/,$//')" \
+    PROMPT_TEXT="You know music: artists, songs, albums. Music filename (may be 'Artist - Title', 'Title - Artist', or just 'Title'; words may run together): $1. Artists already in library: $EXISTING_ARTISTS. Reply EXACTLY one line: ARTIST: <artist> | TITLE: <song> — use your knowledge to split it right. If no artist is identifiable, reply: TITLE-ONLY: <song>. If neither, reply UNKNOWN." \
+    python3 - "$LEGION_OLLAMA" "${JEV_MODEL:-qwen2.5:3b-instruct}" <<'EOF' || return 2
+import json, os, sys, urllib.request
+base, model = sys.argv[1], sys.argv[2]
+req = urllib.request.Request(base + "/api/generate",
+    json.dumps({"model": model, "prompt": os.environ["PROMPT_TEXT"][:2000],
+                "stream": False}).encode())
+print(json.load(urllib.request.urlopen(req, timeout=120)).get("response", "UNKNOWN"))
+EOF
+)"
+  line="$(echo "$resp" | grep -oi 'ARTIST:.*|.*TITLE:.*\|TITLE-ONLY:.*\|UNKNOWN' | head -n1 || true)"
+  if echo "$line" | grep -qi 'TITLE-ONLY:'; then
+    printf 'Unknown Artist\t%s' "$(echo "$line" | sed 's/.*TITLE-ONLY: *//I')"
+  elif echo "$line" | grep -qi 'ARTIST:'; then
+    printf '%s\t%s' "$(echo "$line" | sed 's/ARTIST: *//I;s/ *|.*//')" \
+                    "$(echo "$line" | sed 's/.*TITLE: *//I')"
+  else
+    return 1
+  fi
+}
+if [ -z "$ARTIST" ]; then  # no embedded tag: Jev splits by general knowledge
+  basebn="$(basename "$FILE")"; basebn="${basebn%.*}"
+  SPLIT=""
+  if [ -n "${LEGION_OLLAMA:-}" ]; then
+    SPLIT="$(jev_split "$basebn" 2>/dev/null)" || SPLIT=""
+  fi
+  if [ -n "$SPLIT" ]; then
+    ARTIST="${SPLIT%%$'\t'*}"
+    [ -n "$ARTIST" ] || ARTIST="Unknown Artist"
+  else  # Jev unreachable: dumb "A - B" heuristic, corrected on next queue pass
+    case "$basebn" in *" - "*) ARTIST="${basebn%% - *}";; *) ARTIST="Unknown Artist";; esac
+  fi
 fi
 
 # Speech check via Legion whisper (OpenAI-compatible /v1/audio/transcriptions).

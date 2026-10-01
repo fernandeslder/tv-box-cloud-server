@@ -6,7 +6,8 @@ Shared facts (both OSes): Tailscale with per-boot hostnames `legion-win` / `legi
 
 ## Models (same list, both OSes — pull once per OS, ~10GB each side)
 ```
-qwen2.5:3b-instruct   # the "Jeff" role: secrets judge, ~2GB VRAM, seconds per snippet
+qwen2.5:3b-instruct   # Jev (System 1): secrets judge + fit-checks, ~2GB VRAM, seconds per snippet
+qwen2.5:7b-instruct   # System 2: names genuinely new categories, ~5GB VRAM, slow lane (Ollama swaps it in on demand)
 moondream             # vision: screenshots / handwriting / nasty layouts, ~2GB VRAM
 # llava:7b            # optional captions, ~5GB VRAM — only if you want chatty descriptions
 faster-whisper small  # STT: speech-vs-music + recording transcripts, ~2GB VRAM (compose profile `audio`, :9000)
@@ -18,7 +19,7 @@ Ollama env (both OSes): `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_KEEP_ALIVE=5m` —
 2. Install recent **NVIDIA driver** (Game Ready or Studio).
 3. Install **Ollama for Windows** (native app). In Settings/env set the two vars above, and bind LAN access: `OLLAMA_HOST=0.0.0.0` + Windows Firewall rule allowing TCP 11434 from the Tailscale range (`100.64.0.0/10`) and LAN. Verify from TV box: `curl http://legion-win:11434/api/tags`.
 4. Install **WSL2 + Ubuntu** + **Docker Desktop** (WSL2 backend, Ubuntu integration on). For Immich remote ML: `docker compose --profile photos up -d` in `docker/ml-laptop` (runs `:3003`). In Immich Admin → ML Settings add `http://legion-win:3003`. Versions must match the TV box.
-5. `ollama pull qwen2.5:3b-instruct` + `ollama pull moondream`.
+5. `ollama pull qwen2.5:3b-instruct` + `ollama pull moondream` + `ollama pull qwen2.5:7b-instruct` (System 2, slow lane).
 
 ## Path B — CachyOS (target once Dota is fixed)
 1. Boot CachyOS, install **Tailscale** (`sudo pacman -S tailscale; sudo systemctl enable --now tailscaled; sudo tailscale up`), set machine name `legion-linux`.

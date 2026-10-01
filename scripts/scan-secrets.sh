@@ -2,7 +2,7 @@
 # scan-secrets.sh — Tier 0/1 secrets screening for new files. Local only, never cloud.
 # Usage:
 #   ./scan-secrets.sh <file-or-dir>            # Tier 0: TruffleHog deterministic scan (CPU, ms)
-#   ./scan-secrets.sh --llm <text-file>        # Tier 1: "Jeff" judge on Legion via Ollama
+#   ./scan-secrets.sh --llm <text-file>        # Tier 1: Jev (System 1) judge on Legion via Ollama
 #     stdout: judge answer whose first line is "VERDICT: CLEAN|SECRET, CONFIDENCE: 0-100"
 # Exit 0 = clean (any confidence — caller routes on confidence), 1 = secret, 2 = couldn't scan.
 set -euo pipefail

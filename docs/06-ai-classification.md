@@ -16,7 +16,7 @@ inbox/ --> ingest.sh: type-sort by MIME/extension --> Photos/ Documents/ Music/ 
   clean / unscanned --> stays where it is + tag `pending-ai` + job in .ai-queue/
            |
   Legion online? ai-queue.sh drains oldest-first (Legion is YOURS, so unprocessed files may go there):
-    - doc transcript --> qwen2.5:3b judge ("Jeff" role) --> HIT? private/ : clean
+    - doc transcript --> Jev qwen2.5:3b (System 1) judge --> HIT? private/ : clean
     - photo --> moondream transcribes visible text --> judge transcript --> HIT? private/ : clean
     - clean photo --> Immich faces/CLIP (Legion CUDA, or slow TV-box CPU fallback)
            |
@@ -27,7 +27,7 @@ inbox/ --> ingest.sh: type-sort by MIME/extension --> Photos/ Documents/ Music/ 
 `./scripts/scan-secrets.sh <file>` — TruffleHog, `--no-verification` (never phones providers to "verify" a live key). Catches AWS/GCP/GitHub/Stripe-style keys, private keys, high-entropy tokens. Exit 1 = move to `private/`.
 
 ## TIER 1 + vision — Legion 7, all local (see `docs/10`)
-- Judge: `qwen2.5:3b-instruct` (or `llama3.2:3b`), ~2GB VRAM, seconds per snippet. Prompt is fixed: *"Does this text contain secret credentials? YES <type> / NO."*
+- Judge: Jev = `qwen2.5:3b-instruct` (System 1), ~2GB VRAM, seconds per snippet. Fixed prompt demands `VERDICT: CLEAN|SECRET, CONFIDENCE: 0-100` — the confidence feeds the paid router (`router_decide`).
 - Vision: `moondream` transcribes screenshots/handwriting; its transcript goes through the same judge. Covers your screenshot-upload case with no extra tooling.
 - Orchestration (12GB VRAM): Ollama max-1-loaded + 5-min eviction swaps judge↔vision; Immich ML bulk jobs overnight. Full table in `docs/10`.
 
@@ -79,7 +79,8 @@ Also-rans: Mistral Ministral 3B ($0.10/$0.10), DeepSeek Flash ($0.15/$0.60 off-p
 
 ## Documents — filename first, summary second, private never leaves
 - Stage 0 (`sort-docs.sh --stage0`, TV box, zero network): filename + transcript regexes sort IDs / Finance / Health straight into `private/<Cat>/` — a driver's license has no "password" in it, so Tier-0 alone would miss it. This stage never calls anything, not even the Legion.
-- Stage 1 (`--stage1`, Legion LLM, your hardware): filename weighted highest + content summary decides `Documents/Bills|Work|Travel|Manuals|Receipts|Legal|Other/` + a one-line `.summary.txt` sidecar.
+- Stage 1 (`--stage1` via `categorize.sh`, Legion, your hardware): **Jev-first workflow**. Jev (System 1, `qwen2.5:3b`) sees the filename (highest weight), the current folder list, and a content excerpt, and answers EXISTING category or NEW. Only on NEW does System 2 (`qwen2.5:7b`) get asked — with the existing categories + content — to invent a short folder name. No fixed allowlist: folders grow themselves (`Documents/` subdirs are the category list). Each placement gets a one-line `.summary.txt` sidecar.
+- Music filenames get the same Jev treatment (`sort-music.sh`): `Artist - Title`, `Title - Artist`, or bare `Title` are split by general knowledge of actual artists/songs (a dumb splitter would file "Around The World - Daft Punk" under artist "Around The World"); known song titles with no artist tag are identified outright. Falls back to the dumb split only if the Legion is unreachable.
 - `private/` is fully sorted too (`IDs/ Finance/ Health/ Other/`), fully visible to you, and code-blocked from every outside API including paid escalation.
 
 ## Offline Legion? (expected — it's a laptop)

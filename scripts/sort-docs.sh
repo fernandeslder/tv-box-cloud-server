@@ -35,20 +35,11 @@ if [ "$MODE" = "--stage0" ]; then
   exit 1
 fi
 
-# --stage1: Legion LLM (YOUR hardware, allowed). Filename gets highest weight,
-# then summary of content decides the folder.
-[ -n "${LEGION_OLLAMA:-}" ] || { echo "sort-docs: no LEGION_OLLAMA" >&2; exit 2; }
-OUT="$(mktemp)"
-PROMPT="You organize personal documents. The FILENAME matters most, content second. Reply EXACTLY two lines: CATEGORY: <one of Bills Work Travel Manuals Receipts Legal Other> then SUMMARY: <one short line>. Filename: $(basename "$FILE"). Content: $(head -c 1500 "$TXT" 2>/dev/null || true)"
-if ! curl -sf -m 120 "$LEGION_OLLAMA/api/generate" \
-    -d "$(python3 -c "import json,sys; print(json.dumps({'model': sys.argv[1], 'prompt': open(sys.argv[2]).read()[:2000], 'stream': False}))" "${JUDGE_MODEL:-qwen2.5:3b-instruct}" <(echo "$PROMPT"))" \
-    -o "$OUT" 2>/dev/null; then
-  rm -f "$OUT"; echo "sort-docs: legion LLM unreachable" >&2; exit 2
-fi
-RESP="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('response',''))" "$OUT")"
-rm -f "$OUT"
-CAT="$(echo "$RESP" | grep -oi 'CATEGORY: *[A-Za-z]*' | grep -oi 'Bills\|Work\|Travel\|Manuals\|Receipts\|Legal\|Other' | head -n1 || true)"
-SUM="$(echo "$RESP" | grep -oi 'SUMMARY:.*' | head -n1 || true)"
-[ -n "$CAT" ] || CAT="Other"
+# --stage1: Jev-first dynamic categorization (YOUR hardware — Legion Ollama).
+# Filename weighs highest via the prompt; pre-existing folders win; genuinely
+# new piles get named by System 2. See categorize.sh for the full workflow.
+OUT="$(./categorize.sh "$POOL/Documents" "$(basename "$FILE")" "$TXT" 2>/dev/null)" || exit 2
+CAT="$(echo "$OUT" | grep -oi 'CATEGORY:.*' | sed 's/.*CATEGORY: *//I' | head -n1)"
+SUM="$(echo "$OUT" | grep -oi 'SUMMARY:.*' | head -n1)"
 DEST="$(place "Documents/$CAT")"
 [ -n "$SUM" ] && echo "$SUM" > "$DEST.summary.txt" || true
