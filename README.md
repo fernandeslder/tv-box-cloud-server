@@ -56,4 +56,4 @@ backups/        # backup.sh + policy
 
 Status: **planning phase**. Nothing is installed by these docs alone. Run `scripts/install.sh` only on the flashed target.
 
-**FOSS policy:** everything default is free + open source, phone apps included — `docs/00-overview.md`, exceptions labeled in place.
+**FOSS policy:** free first, open source preferred, paid last-resort via router — `docs/00-overview.md`.

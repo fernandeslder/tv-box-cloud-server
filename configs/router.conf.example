@@ -1,0 +1,22 @@
+# router.conf — escalation policy. Copy to configs/router.conf and edit. NEVER commit the real one.
+# Priority ladder: FREE local (Tier 0/1) > self-hosted anything > PAID (last resort, capped).
+# Paid escalation ONLY for: verdict CLEAN + confidence < ROUTER_CONFIDENCE_MIN.
+# SECRET verdicts NEVER route to paid. Ever. (Enforced in code, not just policy.)
+
+# Master switch. Default off — turn on only with a provider key below.
+PAID_ENABLED=false
+
+# Below this confidence (0-100), a CLEAN local verdict escalates instead of being accepted.
+ROUTER_CONFIDENCE_MIN=70
+
+# Hard monthly ceiling (USD). Router refuses escalation past it; jobs wait as needs-paid.
+PAID_MONTHLY_CAP_USD=2.00
+
+# Cheapest-first order. Currently implemented: gemini. Add providers in scripts/router.sh.
+PAID_PROVIDER_ORDER="gemini"
+GEMINI_MODEL="gemini-2.0-flash"
+# Cost booked per escalation call (transcripts truncated to ~4KB by the router).
+PAID_EST_PER_CALL_USD=0.002
+
+# Provider keys (leave empty = that provider skipped):
+GEMINI_API_KEY=

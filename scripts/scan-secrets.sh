@@ -3,7 +3,8 @@
 # Usage:
 #   ./scan-secrets.sh <file-or-dir>            # Tier 0: TruffleHog deterministic scan (CPU, ms)
 #   ./scan-secrets.sh --llm <text-file>        # Tier 1: "Jeff" judge on Legion via Ollama
-# Exit 0 = clean, 1 = secrets found (route to private/), 2 = couldn't scan (stay queued).
+#     stdout: judge answer whose first line is "VERDICT: CLEAN|SECRET, CONFIDENCE: 0-100"
+# Exit 0 = clean (any confidence — caller routes on confidence), 1 = secret, 2 = couldn't scan.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -23,12 +24,12 @@ legion_ollama() {
 if [ "${1:-}" = "--llm" ]; then
   FILE="${2:?usage: scan-secrets.sh --llm <text-file>}"
   OLLAMA_URL="$(legion_ollama)" || exit 2  # exit 2 = legion offline, keep job queued
-  PROMPT="Does the following text contain secret credentials (API keys, passwords, auth tokens, private keys)? Reply with exactly YES <type> or NO. Text: $(head -c 6000 "$FILE")"
+  PROMPT="Does the following text contain secret credentials (API keys, passwords, auth tokens, private keys)? Reply with the FIRST line in EXACTLY this format: VERDICT: CLEAN or VERDICT: SECRET, CONFIDENCE: 0-100. Then optionally one short reason. Text: $(head -c 6000 "$FILE")"
   ANSWER=$(curl -s -m 120 "$OLLAMA_URL/api/generate" \
     -d "$(python3 -c "import json,sys; print(json.dumps({'model': sys.argv[1], 'prompt': open(sys.argv[2]).read()[:6000], 'stream': False}))" "$JUDGE_MODEL" <(echo "$PROMPT"))" \
     | python3 -c "import json,sys; print(json.load(sys.stdin).get('response',''))")
   echo "$ANSWER"
-  echo "$ANSWER" | grep -qi '^YES' && exit 1 || exit 0
+  echo "$ANSWER" | grep -qi 'VERDICT: *SECRET' && exit 1 || exit 0
 fi
 
 TARGET="${1:?usage: scan-secrets.sh <file-or-dir>}"

@@ -31,12 +31,13 @@ inbox/ --> ingest.sh: type-sort by MIME/extension --> Photos/ Documents/ Music/ 
 - Vision: `moondream` transcribes screenshots/handwriting; its transcript goes through the same judge. Covers your screenshot-upload case with no extra tooling.
 - Orchestration (12GB VRAM): Ollama max-1-loaded + 5-min eviction swaps judge↔vision; Immich ML bulk jobs overnight. Full table in `docs/10`.
 
-## Enrichment of CLEAN files (optional, outside APIs are proprietary — off by default)
-Default is Legion (free): Immich search/faces, Ollama captions → Immich tags. If you outgrow that, cheapest outside options, **clean files only** (all third-party + proprietary, enable consciously):
-1. **Google Gemini Flash** — generous free tier, good doc/image categorization.
-2. **Cloudflare Workers AI** — pay-per-use, cheap at low volume.
-3. **Jina embeddings/reader** — free tier, good for semantic file search.
-Enable one by adding its key to `docker/.env` + a worker call in `ai-queue.sh`. Secret/`pending-ai` files are code-blocked from this path (the worker only picks jobs marked clean).
+## Enrichment + paid escalation router (paid = last resort, minimized by code)
+Priority ladder: **free local > self-hosted Legion > paid**. The router (`scripts/router.sh`, policy in `configs/router.conf`) enforces it per file:
+- `SECRET` verdict → **BLOCKED** from paid, always. Coded, not just policy.
+- `CLEAN` + confidence ≥ 70 → done locally, $0.
+- `CLEAN` + confidence < 70 → escalate **only the ~4KB text transcript** (never raw files/images) to the cheapest provider in order (Gemini Flash first), **only if** `PAID_ENABLED=true`, a key exists, and the monthly cap (`PAID_MONTHLY_CAP_USD`, default $2) isn't hit. Otherwise the job waits as `needs-paid`.
+- Every escalation is booked in `.ai-queue/spend.log`; over budget → automatic DEFER. Paid off (default) → low-confidence CLEAN is accepted locally and logged.
+- Subcategorization beyond secrets (faces, scenery, doc topics): Legion free by default. Outside APIs only ever see clean-screened transcripts, only if you opt in.
 
 ## Offline Legion? (expected — it's a laptop)
 Uploads still land, sort, and stay visible. Docs get Tier 0 immediately; everything else waits as `pending-ai`, usable locally, excluded from offsite/cloud copy. Local USB restic backup includes all of it (never leaves the house). Queue drains when `legion-linux` or `legion-win` answers.

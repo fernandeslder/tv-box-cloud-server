@@ -8,6 +8,7 @@ need_root
 # auto-create .env files from examples so a fresh clone just works (user still edits passwords/UUIDs)
 [ -f ../docker/.env ] || { cp ../docker/.env.example ../docker/.env; log "created docker/.env from example — EDIT passwords/UUIDs"; }
 [ -f ../docker/cloud/.env.immich ] || { cp ../docker/cloud/.env.immich.example ../docker/cloud/.env.immich 2>/dev/null || true; }
+[ -f ../configs/router.conf ] || { cp ../configs/router.conf.example ../configs/router.conf; log "created configs/router.conf (paid escalation OFF by default)"; }
 # load UUIDs/paths for storage step if present
 set -a; [ -f ../docker/.env ] && . ../docker/.env; set +a
 log "tvbox install start"

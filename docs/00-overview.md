@@ -48,7 +48,10 @@ Remote: Tailscale Split-DNS --> Pi-hole tailnet IP --> Caddy. No port forwards.
 6. Stremio v5 + **Torrentio** (`https://torrentio.strem.fun`) + optional Debrid.
 7. Proxy = **Caddy** (only owner of :80/:443). Pi-hole web remapped to :8080.
 
-## FOSS policy (everything free + open source by default, phone apps included)
+## Cost policy (free first, FOSS preferred, paid last-resort via router)
+Priority: **free > self-hosted (even closed-source) > paid-minimized**. Tailscale is fine (free); FOSS is a preference, not a gate; paid fires only through the confidence router in `docs/06` (low-confidence CLEAN, transcript-only, capped).
+- Server + phone apps: free throughout (open-source where possible — full shelf in the FOSS note below).
+- Honest exceptions, all labeled where used: **NVIDIA driver blob** (free-of-charge, required for CUDA), **Tailscale control plane** (proprietary; Headscale/WireGuard path in `docs/05`), **model weights** (open-weights, not OSI licenses), **optional paid APIs** (Debrid, B2/Storj, Gemini — never required, router-gated).
 - Server: Ubuntu, CachyOS, Kodi, Immich, Nextcloud, Navidrome, Audiobookshelf, Jellyfin, Pi-hole, Unbound, Caddy, Tailscale-free-tier, Docker, Ollama (MIT code), TruffleHog, Tesseract, restic, rclone, mergerfs — all FOSS, $0.
 - Phone apps (all FOSS): **Immich** (photos), **Nextcloud** (files), **Kore** (Kodi remote), **KDE Connect** (keyboard/touchpad), **Tempo / Ultrasonic** (music), **Audiobookshelf app** (audiobooks), **Jellyfin mobile** (video).
 - Honest exceptions, all labeled where used: **NVIDIA driver blob** (free-of-charge, required for CUDA — Nouveau can't do compute), **Tailscale control plane** (proprietary; Headscale/WireGuard path documented in `docs/05`), **model weights** (`qwen2.5`, `moondream`, `llava` are open-weights, not OSI-approved licenses), **optional paid APIs** (Debrid, B2/Storj, Gemini — never required, always gated behind screening).

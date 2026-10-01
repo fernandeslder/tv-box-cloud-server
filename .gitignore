@@ -1,6 +1,7 @@
 # real secrets / local state — never commit
 docker/.env
 docker/cloud/.env.immich
+configs/router.conf
 docker/*/data/
 *.log
 .restics/
