@@ -16,28 +16,17 @@ tags() {  # artist|album|title (empty fields allowed)
 }
 ARTIST="$(tags | grep -i '^artist=' | cut -d= -f2- | head -n1 || true)"
 ALBUM="$(tags | grep -i '^album=' | cut -d= -f2- | head -n1 || true)"
-jev_split() {  # $1=basename-noext -> "ARTIST<TAB>TITLE" (Jev general-knowledge split)
-  local resp line
-  resp="$(EXISTING_ARTISTS="$(cd "$POOL/Music" 2>/dev/null && find . -maxdepth 1 -mindepth 1 -type d -printf '%f\n' 2>/dev/null | sort | head -n 30 | tr '\n' ',' | sed 's/,$//')" \
-    PROMPT_TEXT="You know music: artists, songs, albums. Music filename (may be 'Artist - Title', 'Title - Artist', or just 'Title'; words may run together): $1. Artists already in library: $EXISTING_ARTISTS. Reply EXACTLY one line: ARTIST: <artist> | TITLE: <song> — use your knowledge to split it right. If no artist is identifiable, reply: TITLE-ONLY: <song>. If neither, reply UNKNOWN." \
-    python3 - "$LEGION_OLLAMA" "${JEV_MODEL:-qwen2.5:3b-instruct}" <<'EOF' || return 2
-import json, os, sys, urllib.request
-base, model = sys.argv[1], sys.argv[2]
-req = urllib.request.Request(base + "/api/generate",
-    json.dumps({"model": model, "prompt": os.environ["PROMPT_TEXT"][:2000],
-                "stream": False}).encode())
-print(json.load(urllib.request.urlopen(req, timeout=120)).get("response", "UNKNOWN"))
-EOF
-)"
-  line="$(echo "$resp" | grep -oi 'ARTIST:.*|.*TITLE:.*\|TITLE-ONLY:.*\|UNKNOWN' | head -n1 || true)"
-  if echo "$line" | grep -qi 'TITLE-ONLY:'; then
-    printf 'Unknown Artist\t%s' "$(echo "$line" | sed 's/.*TITLE-ONLY: *//I')"
-  elif echo "$line" | grep -qi 'ARTIST:'; then
-    printf '%s\t%s' "$(echo "$line" | sed 's/ARTIST: *//I;s/ *|.*//')" \
-                    "$(echo "$line" | sed 's/.*TITLE: *//I')"
-  else
-    return 1
-  fi
+jev_split() {  # $1=basename-noext -> "ARTIST<TAB>TITLE" (Jev fields decision, typed)
+  local out artist title only
+  ARTISTS="$(cd "$POOL/Music" 2>/dev/null && find . -maxdepth 1 -mindepth 1 -type d -printf '%f\n' 2>/dev/null | sort | head -n 30 | tr '\n' ',' | sed 's/,$//')"
+  out="$(./jev.sh fields '{"artist":"string","title":"string","title_only":"boolean"}' \
+    "You know music: artists, songs, albums. Music filename (may be 'Artist - Title', 'Title - Artist', or just 'Title'; words may run together): $1. Artists already in library: $ARTISTS. artist = the performing artist (use your knowledge; empty string if truly unidentifiable), title = the song name, title_only = true if no artist is identifiable.")" || return 2
+  artist="$(echo "$out" | python3 -c "import json,sys; print(json.load(sys.stdin).get('artist',''))")"
+  title="$(echo "$out" | python3 -c "import json,sys; print(json.load(sys.stdin).get('title',''))")"
+  only="$(echo "$out" | python3 -c "import json,sys; print('yes' if json.load(sys.stdin).get('title_only') else 'no')")"
+  [ -n "$title" ] || return 1
+  if [ "$only" = "yes" ] || [ -z "$artist" ]; then printf 'Unknown Artist\t%s' "$title";
+  else printf '%s\t%s' "$artist" "$title"; fi
 }
 if [ -z "$ARTIST" ]; then  # no embedded tag: Jev splits by general knowledge
   basebn="$(basename "$FILE")"; basebn="${basebn%.*}"

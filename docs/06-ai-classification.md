@@ -26,10 +26,15 @@ inbox/ --> ingest.sh: type-sort by MIME/extension --> Photos/ Documents/ Music/ 
 ## TIER 0 — deterministic secret scan (TV box, always available)
 `./scripts/scan-secrets.sh <file>` — TruffleHog, `--no-verification` (never phones providers to "verify" a live key). Catches AWS/GCP/GitHub/Stripe-style keys, private keys, high-entropy tokens. Exit 1 = move to `private/`.
 
-## TIER 1 + vision — Legion 7, all local (see `docs/10`)
-- Judge: Jev = `qwen2.5:3b-instruct` (System 1), ~2GB VRAM, seconds per snippet. Fixed prompt demands `VERDICT: CLEAN|SECRET, CONFIDENCE: 0-100` — the confidence feeds the paid router (`router_decide`).
-- Vision: `moondream` transcribes screenshots/handwriting; its transcript goes through the same judge. Covers your screenshot-upload case with no extra tooling.
-- Orchestration (12GB VRAM): Ollama max-1-loaded + 5-min eviction swaps judge↔vision; Immich ML bulk jobs overnight. Full table in `docs/10`.
+## System 1: Jev decision contract (typed, never parsed prose)
+A System 1 model (TypeSafe's Jev, Sept 2026) doesn't chat — it returns typed decisions: noul (yes/no), choice (pick one), score (0-100), with calibrated confidence. Our pipeline speaks that contract via `scripts/jev.sh`, which constrains any Ollama-hosted decision model with JSON-schema structured outputs (temperature 0) and validates the shape. Anything unparseable = exit 2 = job stays queued. No grep ever decides anything.
+- Secrets: `jev.sh noul` ("secret credentials in this text?") — scan-secrets prints the legacy VERDICT line for existing parsers, but the decision arrived as typed JSON.
+- Categories: `jev.sh choice` over live folder lists (+ NEW) — categorize.sh. Summaries are display-only free text, never control flow.
+- Music split: `jev.sh fields` (artist/title/title_only) — sort-music.sh.
+- Vision (moondream) and whisper transcripts flow through the same noul judge — one decision interface for every modality.
+- Scores: `jev.sh score` for future quality gates; confidence already feeds the paid router (`router_decide`).
+- Drop-in engines via JEV_MODEL: the default `qwen2.5:3b-instruct` is a stand-in, not a true decision-tuned model. Verified open alternatives: Kev 0.8B/4B/9B (Jared Palmer, Qwen3.5-based, Jev-compatible API), Laya (Apache 2.0, calibrated choice/score/boolean), SemIf (logit-softmax over frozen Qwen3.5 4B, no retraining), NanoJev 0.6B (tiny enough for TV-box CPU).
+- JEV_URL defaults to the Legion but can point at localhost: run NanoJev via Ollama on the TV box itself and Tier-1 screening keeps working with the Legion offline. (Opt-in; needs `ollama serve` on tvbox.)
 
 ## Enrichment + escalation router (free first, paid last-resort, minimized by code)
 Priority ladder: **free local > self-hosted Legion > FREE external > paid**.

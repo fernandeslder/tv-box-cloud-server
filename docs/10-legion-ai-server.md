@@ -11,6 +11,7 @@ qwen2.5:7b-instruct   # System 2: names genuinely new categories, ~5GB VRAM, slo
 moondream             # vision: screenshots / handwriting / nasty layouts, ~2GB VRAM
 # llava:7b            # optional captions, ~5GB VRAM — only if you want chatty descriptions
 faster-whisper small  # STT: speech-vs-music + recording transcripts, ~2GB VRAM (compose profile `audio`, :9000)
+Jev engine default: qwen2.5:3b-instruct (stand-in). Swap JEV_MODEL to a true decision-tuned engine anytime: Kev 0.8B/4B/9B, Laya, SemIf, or NanoJev 0.6B (NanoJev is small enough to run on the TV box itself — see `docs/06`).
 ```
 Ollama env (both OSes): `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_KEEP_ALIVE=5m` — one resident model max, auto-swap. This is the LLM-side orchestration; nothing else needed.
 
