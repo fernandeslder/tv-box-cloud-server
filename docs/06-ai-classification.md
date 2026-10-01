@@ -62,5 +62,25 @@ Also-rans: Mistral Ministral 3B ($0.10/$0.10), DeepSeek Flash ($0.15/$0.60 off-p
 - You opted into training-on-data terms, which unlocks the free tiers above as overflow: Groq free tier and Gemini AI Studio free tier can absorb escalations at $0 before paid billing even starts.
 - At ~$0.0001/call, the $2 default cap buys ~20,000 escalations/month. You will realistically spend $0.
 
+## Faces — Immich does this (Google-Photos-style)
+- Face detection runs inside immich-machine-learning (InsightFace, Legion CUDA or TV-box CPU fallback) automatically on every photo in the Immich library.
+- Name people once in the Immich app (People view); every photo of them becomes searchable by name, and Smart Search answers "photos of X at the beach".
+- Sorted `Photos/` get the same treatment: add `/mnt/pool/Photos` as an Immich **external library** (read-only) so faces + CLIP search cover your sorted folders too — no duplicates, no double storage. See `docs/04`.
+- Person names live in Immich's database (backed up with Postgres), not in filenames.
+
+## Audio — speech vs music (whisper on YOUR Legion)
+- Every audio job goes to faster-whisper (`small`, ~2GB VRAM, `:9000`, profile `audio`): 8+ transcribed words = speech/recording, else music.
+- Speech goes to `Recordings/` + transcript, and the transcript runs the same Tier-1 secrets judge (a recorded password is still a password).
+- Music goes to `Music/<Artist>/[<Album>/]` from embedded tags (ffprobe), `Artist - Title` filename fallback.
+
+## Music metadata + fuzzy artists
+- Song name = filename (never renamed). Album = folder when the tag exists, else tracks sit directly under the artist.
+- Artist dedup is fuzzy (difflib >= 0.87 on whitespace-normalized names): "Beatles", "Beat les", "  beatles", one-letter typos all land in one folder. A new folder is created only when nothing existing is close.
+
+## Documents — filename first, summary second, private never leaves
+- Stage 0 (`sort-docs.sh --stage0`, TV box, zero network): filename + transcript regexes sort IDs / Finance / Health straight into `private/<Cat>/` — a driver's license has no "password" in it, so Tier-0 alone would miss it. This stage never calls anything, not even the Legion.
+- Stage 1 (`--stage1`, Legion LLM, your hardware): filename weighted highest + content summary decides `Documents/Bills|Work|Travel|Manuals|Receipts|Legal|Other/` + a one-line `.summary.txt` sidecar.
+- `private/` is fully sorted too (`IDs/ Finance/ Health/ Other/`), fully visible to you, and code-blocked from every outside API including paid escalation.
+
 ## Offline Legion? (expected — it's a laptop)
 Uploads still land, sort, and stay visible. Docs get Tier 0 immediately; everything else waits as `pending-ai`, usable locally, excluded from offsite/cloud copy. Local USB restic backup includes all of it (never leaves the house). Queue drains when `legion-linux` or `legion-win` answers.

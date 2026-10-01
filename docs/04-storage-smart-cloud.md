@@ -12,14 +12,18 @@ UUID=<4TB-UUID>  /mnt/disk2 ext4 defaults,nofail,x-systemd.automount 0 2
 
 ## SSD vs HDD roles
 - SSD `/mnt/cache` (ext4, 238GB NVMe): `/var/lib/docker`, Postgres, Redis, Immich `thumbs/encoded-video`, Nextcloud previews, model-cache. This is the "1GB/s ingest" feel — HDD sequential (~180MB/s) already saturates 1Gbps (125MB/s); DB/thumbs latency is the real bottleneck.
-- Pool `/mnt/pool`: `Photos/ Documents/ Music/ Videos/ Other/ private/` (ingest sorted, all in Nextcloud), `immich/` (photo originals), `files/` (Nextcloud data), `media/` (Jellyfin), `backups/`.
+- Pool `/mnt/pool`: `inbox/` (single Uploads target, drained by ingest), `Photos/ Documents/ Music/ Recordings/ Videos/ Other/ private/` (ingest sorted, all in Nextcloud), `immich/` (photo originals), `files/` (Nextcloud data), `media/` (Jellyfin), `backups/`.
 - Optional SSD landing + nightly mover (`rsync --remove-source-files` + rescan) — simpler to write originals direct to pool and keep thumbs on SSD.
 
 ## Photos = Immich (primary)
 - Server + Postgres (`pgvector/pgvector:pg16`) + Redis on SSD; `UPLOAD_LOCATION=/mnt/pool/immich`.
 - Phone: Immich app auto-backup (incremental, background). Nextcloud app only for docs.
 - No manual folders: timeline + map + CLIP search + faces + auto-albums. Ollama captions → Immich API tags (see `06-ai-classification.md`).
+- Faces: detection is automatic (InsightFace in immich-ml). You name each person once in the app's People view; from then on search "Maya" and get every photo of Maya. To cover the sorted folders too, add `/mnt/pool/Photos` as an Immich **external library** (read-only) — faces + search over everything, zero duplication.
 - Compose: `docker/cloud/compose.yml`. Keep local `immich-machine-learning` as CPU fallback; prefer remote CUDA on laptop.
+
+## Uploads: everything lands in `inbox/`
+- `inbox/` is the single Uploads target: point the Nextcloud phone app's auto-upload folder at it, save manual downloads (music, photos, files) straight into it, symlink `~/Uploads` to it. `ingest.sh` drains it into sorted folders; nothing lives in `inbox/` permanently.
 
 ## Files = Nextcloud (+ Memories)
 - Docs/files only, data dir `/mnt/pool/files`. If you want pure speed over collaboration, swap to **Seafile** (SeafDrive virtual disk, faster than WebDAV).

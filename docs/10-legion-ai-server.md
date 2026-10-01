@@ -9,6 +9,7 @@ Shared facts (both OSes): Tailscale with per-boot hostnames `legion-win` / `legi
 qwen2.5:3b-instruct   # the "Jeff" role: secrets judge, ~2GB VRAM, seconds per snippet
 moondream             # vision: screenshots / handwriting / nasty layouts, ~2GB VRAM
 # llava:7b            # optional captions, ~5GB VRAM — only if you want chatty descriptions
+faster-whisper small  # STT: speech-vs-music + recording transcripts, ~2GB VRAM (compose profile `audio`, :9000)
 ```
 Ollama env (both OSes): `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_KEEP_ALIVE=5m` — one resident model max, auto-swap. This is the LLM-side orchestration; nothing else needed.
 

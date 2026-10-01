@@ -62,6 +62,8 @@ route_transcript() {
 HOST="$(legion_up)" || { echo "legion offline, queue waits"; exit 0; }
 OLLAMA="http://$HOST:11434"
 export LEGION_OLLAMA="$OLLAMA"
+export WHISPER_URL="http://$HOST:9000"
+export JUDGE_MODEL VISION_MODEL
 echo "legion reachable via $HOST, draining $QUEUE (paid: $PAID_ENABLED, min-conf: $ROUTER_CONFIDENCE_MIN)"
 
 mkdir -p "$QUEUE/done" "$PRIVATE_DIR"
@@ -79,9 +81,41 @@ for job in "$QUEUE"/*.pending; do
       if grep -qi '^NONE' "$transcript"; then
         echo "CLEAN $target (no text visible, Immich will index it)"
       else
+        # Stage-0 local rules on the transcript: a driver's license photo or
+        # work permit never goes to any API — not even the Legion LLM.
+        rc0=0; ./sort-docs.sh --stage0 "$target" "$transcript" >/dev/null 2>&1 || rc0=$?
+        if [ "$rc0" -eq 0 ]; then
+          rm -f "$transcript"
+        else
+          rc=0; route_transcript "$transcript" "$target" || rc=$?
+          rm -f "$transcript"
+          [ "$rc" -eq 2 ] && continue
+        fi
+      fi
+      ;;
+    *.mp3|*.MP3|*.flac|*.FLAC|*.ogg|*.OGG|*.wav|*.WAV|*.m4a|*.M4A|*.opus|*.OPUS|*.aac|*.AAC|*.oga|*.OGA)
+      # Audio: whisper speech-check on YOUR Legion, then music organize.
+      # NOMOVE=1: sort-music only reports speech (transcript on stdout);
+      # ai-queue owns placement so secrets screening happens first.
+      transcript="$(mktemp)"
+      rc=0; NOMOVE=1 ./sort-music.sh "$target" > "$transcript" 2>/dev/null || rc=$?
+      if [ "$rc" -eq 0 ]; then
+        rm -f "$transcript"   # organized as Music/<Artist>/[Album]/
+      elif [ "$rc" -eq 1 ]; then
         rc=0; route_transcript "$transcript" "$target" || rc=$?
         rm -f "$transcript"
-        [ "$rc" -eq 2 ] && continue
+        if [ "$rc" -eq 1 ]; then
+          : # route_transcript already moved it to private/
+        elif [ "$rc" -eq 0 ]; then
+          mkdir -p "$POOL/Recordings"
+          dest="$POOL/Recordings/$(basename "$target")"
+          [ -e "$dest" ] && dest="$POOL/Recordings/$(date +%s)-$(basename "$target")"
+          mv "$target" "$dest" 2>/dev/null || true
+        else
+          continue   # defer, file untouched, stays queued
+        fi
+      else
+        rm -f "$transcript"; echo "AUDIO-BUSY $target (stays queued)"; continue
       fi
       ;;
     *)
@@ -89,11 +123,17 @@ for job in "$QUEUE"/*.pending; do
         txt="$job.txt"; [ -f "$txt" ] || txt="${job%.pending}.txt"
         rc=0; route_transcript "$txt" "$target" || rc=$?
         [ "$rc" -eq 2 ] && continue
+        if [ "$rc" -eq 0 ]; then
+          # CLEAN: Legion LLM categorizes by filename-first + summary (your hardware).
+          rc2=0; ./sort-docs.sh --stage1 "$target" "$txt" >/dev/null 2>&1 || rc2=$?
+          [ "$rc2" -eq 2 ] && continue   # Legion busy, stays queued
+        fi
       else
         echo "SKIP $target (no transcript yet, stays pending-ai)"
         continue
       fi
       ;;
   esac
+  rm -f "$job.txt" "${job%.pending}.txt" 2>/dev/null || true
   mv "$job" "$QUEUE/done/"
 done

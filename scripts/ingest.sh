@@ -9,7 +9,7 @@ cd "$(dirname "$0")"
 INBOX="${1:?usage: ingest.sh <inbox-dir>}"
 POOL="${POOL_ROOT:-/mnt/pool}"
 QUEUE="$POOL/.ai-queue"
-mkdir -p "$POOL/Photos" "$POOL/Documents" "$POOL/Music" "$POOL/Videos" "$POOL/Other" "$POOL/private" "$QUEUE"
+mkdir -p "$POOL/Photos" "$POOL/Documents" "$POOL/Music" "$POOL/Recordings" "$POOL/Videos" "$POOL/Other" "$POOL/private" "$QUEUE"
 
 filetype() {
   local ext="${1##*.}"
@@ -52,11 +52,19 @@ for src in "$INBOX"/*; do
     extract_text "$dest" "$txt"
     rc=0; ./scan-secrets.sh "$dest" >/dev/null 2>&1 || rc=$?
     if [ "$rc" -eq 0 ]; then
-      echo "CLEAN $base -> queued Tier-1"
-      echo "$dest" > "$QUEUE/$stem.pending"
+      # Stage-0 local rules first: IDs/finance/health go private/ even with
+      # zero secrets found (a driver's license has no "password" in it).
+      rc0=0; ./sort-docs.sh --stage0 "$dest" "$txt" >/dev/null 2>&1 || rc0=$?
+      if [ "$rc0" -eq 0 ]; then
+        echo "PRIVATE-SORTED $base (no queue)"
+      else
+        echo "CLEAN $base -> queued Tier-1"
+        echo "$dest" > "$QUEUE/$stem.pending"
+      fi
     elif [ "$rc" -eq 1 ]; then
-      echo "SECRETS $base -> private/"
-      mv "$dest" "$POOL/private/"
+      echo "SECRETS $base -> sub-sorting private/"
+      ./sort-docs.sh --stage0 "$dest" "$txt" >/dev/null 2>&1 \
+        || mv "$dest" "$POOL/private/"
     else
       echo "UNSCANNED $base (scanner unavailable) -> stays pending-ai"
       echo "$dest" > "$QUEUE/$stem.pending"

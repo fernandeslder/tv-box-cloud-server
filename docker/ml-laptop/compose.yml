@@ -42,6 +42,28 @@ services:
     #       ollama pull moondream            (screenshot/vision OCR assist)
     #       ollama pull llava:7b             (optional captions)
 
+  # Speech-to-text for speech-vs-music split + recording transcripts.
+  # OpenAI-compatible POST :9000/v1/audio/transcriptions. ~2GB VRAM (small),
+  # same one-workload-at-a-time GPU rule as everything else on this box.
+  whisper:
+    profiles: ["audio"]
+    image: ahmetoner/whisper-asr-webservice:latest
+    ports:
+      - "9000:9000"
+    environment:
+      ASR_MODEL: small
+      ASR_ENGINE: faster_whisper
+    volumes:
+      - whisper-cache:/root/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
 volumes:
   model-cache:
   ollama:
+  whisper-cache:

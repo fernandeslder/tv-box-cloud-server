@@ -14,5 +14,5 @@ if ! grep -q "mergerfs" /etc/fstab; then
 fi
 systemctl daemon-reload
 mount -a || log "pool mount deferred (disks not attached yet — ok)"
-mkdir -p /mnt/pool/immich /mnt/pool/files /mnt/pool/media /mnt/pool/backups /mnt/cache || true
+mkdir -p /mnt/pool/immich /mnt/pool/files /mnt/pool/media /mnt/pool/backups /mnt/pool/inbox /mnt/pool/Recordings /mnt/cache || true
 log "40-storage ok"
