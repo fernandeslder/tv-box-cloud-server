@@ -37,7 +37,7 @@ backups/        # backup.sh + policy
 | HTPC (bare metal, not Docker) | Kodi, VacuumTube, Firefox, Moonlight-qt, Stremio, IPTVnator, Spotube | TV HDMI |
 | net | Pi-hole v6 + Unbound, Caddy, Tailscale, Dockge, Homepage, Uptime Kuma, Beszel, Watchtower | `*.home.lan` |
 | cloud | Immich + Postgres + Redis, Nextcloud (files), TruffleHog + local LLM secrets gate, restic | `photos.home.lan`, `files.home.lan` |
-| media/dl (opt-in) | Jellyfin, qBittorrent + Gluetun, Prowlarr/Sonarr/Radarr | `jellyfin.home.lan` |
+| media/dl (opt-in) | Jellyfin, Navidrome (self-hosted Spotify), Audiobookshelf, qBittorrent + Gluetun, Prowlarr/Sonarr/Radarr | `jellyfin.home.lan` |
 | Legion 7 (AI worker) | Ollama (`qwen2.5:3b` secrets judge + `moondream` vision) + Immich remote ML `:3003` | Tailscale only |
 
 ## Docs index

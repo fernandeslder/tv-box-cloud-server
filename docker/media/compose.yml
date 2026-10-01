@@ -47,3 +47,32 @@ services:
       - gluetun
     labels:
       - com.centurylinklabs.watchtower.enable=false
+
+  # Self-hosted Spotify: Navidrome (Subsonic API, ~50MB RAM). Phone apps:
+  # Symfonium / Tempo / substreamer. Library = pool Music/ (read-only).
+  navidrome:
+    image: deluan/navidrome:latest
+    restart: unless-stopped
+    ports:
+      - "4533:4533"
+    environment:
+      ND_MUSICFOLDER: /music
+      ND_DATAFOLDER: /data
+      ND_SCANINTERVAL: 1h
+      ND_LOGLEVEL: info
+    volumes:
+      - ${STORAGE_ROOT:-/mnt/pool}/Music:/music:ro
+      - ./data/navidrome:/data
+
+  # Audiobooks + podcasts: Audiobookshelf (~100MB RAM). Own phone app.
+  # Point a library at pool Other/audiobooks (or Music/audiobooks).
+  audiobookshelf:
+    image: ghcr.io/advplyr/audiobookshelf:latest
+    restart: unless-stopped
+    ports:
+      - "13378:80"
+    volumes:
+      - ${STORAGE_ROOT:-/mnt/pool}/Other/audiobooks:/audiobooks
+      - ${STORAGE_ROOT:-/mnt/pool}/Other/podcasts:/podcasts
+      - ./data/audiobookshelf-config:/config
+      - ./data/audiobookshelf-metadata:/metadata

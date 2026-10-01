@@ -12,7 +12,7 @@ UUID=<4TB-UUID>  /mnt/disk2 ext4 defaults,nofail,x-systemd.automount 0 2
 
 ## SSD vs HDD roles
 - SSD `/mnt/cache` (ext4, 238GB NVMe): `/var/lib/docker`, Postgres, Redis, Immich `thumbs/encoded-video`, Nextcloud previews, model-cache. This is the "1GB/s ingest" feel — HDD sequential (~180MB/s) already saturates 1Gbps (125MB/s); DB/thumbs latency is the real bottleneck.
-- Pool `/mnt/pool`: `immich/`, `files/`, `media/`, `backups/`.
+- Pool `/mnt/pool`: `Photos/ Documents/ Music/ Videos/ Other/ private/` (ingest sorted, all in Nextcloud), `immich/` (photo originals), `files/` (Nextcloud data), `media/` (Jellyfin), `backups/`.
 - Optional SSD landing + nightly mover (`rsync --remove-source-files` + rescan) — simpler to write originals direct to pool and keep thumbs on SSD.
 
 ## Photos = Immich (primary)

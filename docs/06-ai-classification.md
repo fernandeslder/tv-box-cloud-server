@@ -4,13 +4,13 @@ Locked rules:
 1. **Everything you upload is always accessible to you** (Nextcloud/Immich), scanned or not, secret or not.
 2. Files with secrets live in **`private/`** — same apps, same login, just a separate folder. Not hidden, not deleted.
 3. **Nothing unprocessed or secret-bearing goes to outside APIs.** Your TV box + Legion = allowed (you own them). Third-party APIs = only for files that passed screening, only if you enable it.
-4. **Type-sort runs on-device** by file type (photo/doc/video/other) — instant, no AI needed.
+4. **Type-sort runs on-device** by file type (photo/doc/music/video/other) — instant, no AI needed.
 5. **Subcategorization** (whose face, scenery vs receipt, doc topics): Legion models first (free); cheap outside APIs allowed **only for clean-screened files**.
 
 ```
-inbox/ --> ingest.sh: type-sort by MIME/extension --> Photos/ Documents/ Videos/ Other/
+inbox/ --> ingest.sh: type-sort by MIME/extension --> Photos/ Documents/ Music/ Videos/ Other/
   Documents: extract text (pdftotext/tesseract) --> TIER 0 TruffleHog (tvbox CPU, ms)
-  Photos/Videos: Tier 0 text-scan skipped at ingest (OCR-ing every photo on CPU is too slow)
+  Photos/Videos/Music: Tier 0 text-scan skipped at ingest (OCR-ing everything on CPU is too slow)
            |
   TIER 0 HIT --> private/ (still yours, still in Nextcloud) + tag `has-secrets`, never outside
   clean / unscanned --> stays where it is + tag `pending-ai` + job in .ai-queue/

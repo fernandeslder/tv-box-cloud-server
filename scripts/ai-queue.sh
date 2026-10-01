@@ -4,7 +4,8 @@
 # The Legion is YOURS, so unprocessed files may go there. Outside APIs: clean files only.
 set -euo pipefail
 cd "$(dirname "$0")"
-QUEUE="${AI_QUEUE_DIR:-/mnt/pool/.ai-queue}"
+QUEUE="${AI_QUEUE_DIR:-${POOL_ROOT:-/mnt/pool}/.ai-queue}"
+PRIVATE_DIR="${POOL_ROOT:-/mnt/pool}/private"
 LEGION_HOSTS="${LEGION_HOSTS:-legion-linux legion-win}"
 JUDGE_MODEL="${JUDGE_MODEL:-qwen2.5:3b-instruct}"
 VISION_MODEL="${VISION_MODEL:-moondream}"
@@ -39,7 +40,7 @@ OLLAMA="http://$HOST:11434"
 export LEGION_OLLAMA="$OLLAMA"
 echo "legion reachable via $HOST, draining $QUEUE"
 
-mkdir -p "$QUEUE/done" /mnt/pool/private
+mkdir -p "$QUEUE/done" "$PRIVATE_DIR"
 for job in "$QUEUE"/*.pending; do
   [ -e "$job" ] || { echo "queue empty"; exit 0; }
   target="$(head -n 1 "$job")"
@@ -60,7 +61,7 @@ for job in "$QUEUE"/*.pending; do
           echo "CLEAN $target (text harmless)"
         elif [ "$rc" -eq 1 ]; then
           echo "FLAGGED $target -> private/"
-          mv "$target" /mnt/pool/private/ 2>/dev/null || true
+          mv "$target" "$PRIVATE_DIR/" 2>/dev/null || true
         else
           rm -f "$transcript"; echo "JUDGE-BUSY $target (stays queued)"; continue
         fi
@@ -75,7 +76,7 @@ for job in "$QUEUE"/*.pending; do
           echo "CLEAN $target"
         elif [ "$rc" -eq 1 ]; then
           echo "FLAGGED $target -> private/"
-          mv "$target" /mnt/pool/private/ 2>/dev/null || true
+          mv "$target" "$PRIVATE_DIR/" 2>/dev/null || true
         else
           echo "JUDGE-BUSY $target (stays queued)"; continue
         fi

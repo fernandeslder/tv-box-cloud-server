@@ -3,15 +3,18 @@
 Beyond what you asked — all fit your taste, all free, all run on this box:
 
 1. **Jellyfin server** (`/dev/dri` VA-API) — local movie/show library on the pool, plays in Kodi + Jellyfin Desktop + phones. Pair with **Prowlarr/Sonarr/Radarr** (opt-in, route via Gluetun).
-2. **Paperless-ngx** — auto-ingest scans/PDFs from Nextcloud, OCR + PII gate + full-text search. Natural companion to Presidio.
-3. **Audiobookshelf + Navidrome** — audiobooks + music server, phone apps, tiny RAM.
-4. **Homepage dashboard** at `home.lan` — one family page: Photos, Files, Jellyfin, Pi-hole, qbit. Already in net stack.
+2. **Paperless-ngx** — auto-ingest scans/PDFs from Nextcloud, OCR + full-text search. Complements the Tier-0/1 screening (it only ever sees clean files).
+3. **Navidrome — self-hosted Spotify (NEXT UP, already in `docker/media/compose.yml`)** — Subsonic-API music server, ~50MB RAM, reads pool `Music/` read-only (ingest sorts it). Phone apps: **Symfonium** (best, one-time purchase), **Tempo** (free), substreamer. Web UI included. Handles playlists, transcodes FLAC→MP3 on the fly for mobile data. Start it the day your first albums land in `Music/`.
+4. **Audiobookshelf (NEXT UP, already in compose)** — audiobooks + podcasts, ~100MB RAM, own phone app with sleep timer + progress sync. Libraries point at pool `Other/audiobooks` + `Other/podcasts`. If you listen tooread at 2x, this is your app.
+5. **Homepage dashboard** at `home.lan` — one family page: Photos, Files, Music, Jellyfin, Pi-hole, qbit. Already in net stack — add Navidrome/Audiobookshelf tiles when they go live.
 5. **Scrutiny** — SMART web UI for the 1TB/4TB HDDs, email/Discord alerts before a disk dies.
 6. **Home Assistant** (optional, ~300MB) — TV-box can double as Zigbee/Z-Wave hub later; automate "movie mode" lights via HDMI-CEC trigger.
 7. **Tailscale exit node** — free VPN when traveling, routes via home Pi-hole (ad-blocking on the road).
 8. **Syncthing** (sidecar to Nextcloud) — laptop ↔ server folder sync without cloud, good for the AI model-cache + code.
 9. **Stirling-PDF / IT-Tools** — tiny web utils family actually uses.
 10. **Restic + B2/Storj encrypted copy** — already in runbook; add it week one so the 4TB isn't the only copy.
+11. **Kavita** (ebooks/comics/manga, ~100MB) — only if you read: send-to-Kindle style OPDS + phone readers, reads a pool `Other/ebooks` folder. Skip if you don't read digitally.
+12. **RomM** (retro game library, ~200MB) — fits your Moonlight/gaming side: catalogs ROMs on the pool, browser play via EmulatorJS, pairs with a controller on the couch. Only if you have a retro collection; not a priority.
 
-Suggested order after green: net (Pi-hole+Caddy+Tailscale) → Immich → Nextcloud → Jellyfin → Paperless → *arr/qbit → Home Assistant.
+Suggested order after green: net (Pi-hole+Caddy+Tailscale) → Immich → Nextcloud → **Navidrome + Audiobookshelf** → Jellyfin → Paperless → *arr/qbit → Home Assistant.
 Each is one dir under `docker/` with its own `compose.yml` + README so you can `up -d` incrementally.
