@@ -1,32 +1,42 @@
 # router.conf — escalation policy. Copy to configs/router.conf and edit. NEVER commit the real one.
-# Priority ladder: FREE local (Tier 0/1) > self-hosted anything > PAID (last resort, capped).
+# Priority ladder: FREE local (Tier 0/1) > self-hosted Legion > FREE external (your quotas)
+#   > PAID (last resort, capped). Daily picks in configs/router.managed.conf (price-check.sh).
 # Paid escalation ONLY for: verdict CLEAN + confidence < ROUTER_CONFIDENCE_MIN.
-# SECRET verdicts NEVER route to paid. Ever. (Enforced in code, not just policy.)
+# SECRET verdicts NEVER route outside. Ever. (Enforced in code, not just policy.)
 
-# Master switch. Default off — turn on only with a provider key below.
+# Master switch for PAID step. Default off. Free steps run regardless.
 PAID_ENABLED=false
 
 # Below this confidence (0-100), a CLEAN local verdict escalates instead of being accepted.
 ROUTER_CONFIDENCE_MIN=70
 
-# Hard monthly ceiling (USD). Router refuses escalation past it; jobs wait as needs-paid.
+# Hard monthly ceiling (USD). Router refuses paid calls past it; jobs wait as needs-paid.
 PAID_MONTHLY_CAP_USD=2.00
 
-# Cheapest-first order, verified Sep 2026 (see docs/06 for the price table).
-# All providers below speak OpenAI-compatible /chat/completions — one code path.
-PAID_PROVIDER_ORDER="groq gemini"
+# Cheapest-first paid order (re-sorted daily against prices.json among key-bearing providers).
+PAID_PROVIDER_ORDER="openrouter groq gemini"
 
-# 1) Groq gpt-oss-20b — $0.075 in / $0.30 out per 1M (~$0.00009 per escalation).
-#    Stable company, native OpenAI endpoint, rate-limited free tier (no card).
+# Step 0 — OpenCode free tier via CLI ($0, your quota). Needs on the box, once:
+#   curl -fsSL https://opencode.ai/install | bash   # then: opencode auth login
+# Skipped silently if the CLI is missing/not logged in.
+OPENCODE_ENABLED=true
+OPENCODE_MODEL=opencode/mimo-v2.6-flash-free
+OPENCODE_TIMEOUT=120
+
+# Step 1+2 — OpenRouter pipe (one key, free signup). MODEL/FREE_MODEL are
+# machine-managed daily — leave them empty here, price-check.sh fills them in.
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_MODEL=
+OPENROUTER_FREE_MODEL=
+OPENROUTER_API_KEY=
+
+# Direct-provider fallbacks (own keys, static verified prices — see docs/06).
 GROQ_BASE_URL=https://api.groq.com/openai/v1
 GROQ_MODEL=openai/gpt-oss-20b
 GROQ_API_KEY=
-
-# 2) Gemini 2.5 Flash-Lite — $0.10 in / $0.40 out per 1M (~$0.00012 per escalation).
-#    Generous AI Studio free tier (free tier may train on data — you opted in).
 GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 GEMINI_MODEL=gemini-2.5-flash-lite
 GEMINI_API_KEY=
 
-# Cost booked per escalation call (transcripts truncated to ~4KB by the router).
+# Cost booked per paid escalation call (transcripts truncated to ~4KB by the router).
 PAID_EST_PER_CALL_USD=0.0002

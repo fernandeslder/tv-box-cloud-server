@@ -18,5 +18,12 @@ log "tvbox install start"
 ./40-storage.sh
 ./50-network-dns.sh
 ./60-tailscale-ssh.sh
+# enable background timers (queue drain every 5 min, price refresh daily)
+for t in ai-queue.timer price-check.timer; do
+  install -Dm644 "../configs/systemd/${t%.timer}.service" "/etc/systemd/system/${t%.timer}.service" 2>/dev/null || true
+  install -Dm644 "../configs/systemd/$t" "/etc/systemd/system/$t" 2>/dev/null || true
+done
+systemctl daemon-reload 2>/dev/null || true
+systemctl enable --now ai-queue.timer price-check.timer 2>/dev/null || log "timers not enabled (no systemd?)"
 ./90-verify.sh
 log "tvbox install done — next: cd ../docker && docker compose up -d"

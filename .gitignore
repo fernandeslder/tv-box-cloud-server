@@ -2,6 +2,8 @@
 docker/.env
 docker/cloud/.env.immich
 configs/router.conf
+configs/router.managed.conf
+configs/prices.json
 docker/*/data/
 *.log
 .restics/

@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily cheapest-model price check (tiny download)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=htpc
+WorkingDirectory=/home/htpc/tv-box-cloud-server/scripts
+ExecStart=/home/htpc/tv-box-cloud-server/scripts/price-check.sh
