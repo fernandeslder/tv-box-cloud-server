@@ -23,6 +23,14 @@ OPENCODE_ENABLED=true
 OPENCODE_MODEL=opencode/mimo-v2.6-flash-free
 OPENCODE_TIMEOUT=120
 
+# System 1 fallback chain (see jev.sh): Legion engine first, then NanoJev.
+# Point the fallback at a TV-box-local Ollama running NanoJev 0.6B and Tier-1
+# screening survives Legion outages entirely on-premise. Empty = no fallback.
+#   On the TV box (opt-in): curl -fsSL https://ollama.com/install.sh | sh
+#   ollama serve & ollama pull nanojev   # 0.6B, CPU-feasible
+JEV_FALLBACK_URL=http://localhost:11434
+JEV_FALLBACK_MODEL=
+
 # Step 1+2 — OpenRouter pipe (one key, free signup). MODEL/FREE_MODEL are
 # machine-managed daily — leave them empty here, price-check.sh fills them in.
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1

@@ -11,7 +11,9 @@
 # Models (Legion Ollama, YOUR hardware — nothing external; any Jev-compatible
 # weights such as Kev/NanoJev are drop-in via JEV_MODEL):
 #   JEV_MODEL  System 1: qwen2.5:3b-instruct (fast fit-check)
-#   SYS2_MODEL System 2: qwen2.5:7b-instruct (names genuinely new categories)
+#   SYS2_MODEL System 2: qwen2.5:7b-instruct — generative lane ONLY (invents new
+#     category names). NEVER a fallback for System 1 decisions; those fall back
+#     NanoJev-ward (see jev.sh) or stay queued.
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="${1:?usage: categorize.sh <root-dir> <item-name> <content-file>}"

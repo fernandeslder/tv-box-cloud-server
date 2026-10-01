@@ -35,6 +35,8 @@ A System 1 model (TypeSafe's Jev, Sept 2026) doesn't chat — it returns typed d
 - Scores: `jev.sh score` for future quality gates; confidence already feeds the paid router (`router_decide`).
 - Drop-in engines via JEV_MODEL: the default `qwen2.5:3b-instruct` is a stand-in, not a true decision-tuned model. Verified open alternatives: Kev 0.8B/4B/9B (Jared Palmer, Qwen3.5-based, Jev-compatible API), Laya (Apache 2.0, calibrated choice/score/boolean), SemIf (logit-softmax over frozen Qwen3.5 4B, no retraining), NanoJev 0.6B (tiny enough for TV-box CPU).
 - JEV_URL defaults to the Legion but can point at localhost: run NanoJev via Ollama on the TV box itself and Tier-1 screening keeps working with the Legion offline. (Opt-in; needs `ollama serve` on tvbox.)
+- Fallback chain (jev.sh, configured in `configs/router.conf`): Legion System-1 engine first, then local NanoJev (`JEV_FALLBACK_URL` + `JEV_FALLBACK_MODEL`; empty = no fallback), then defer. A malformed answer counts as "can't decide" and falls back too — but a valid low-confidence decision is an ANSWER, never a failure (confidence is the paid router's job, not a retry trigger).
+- Lane separation: System 2 (`qwen2.5:7b`) only ever invents new category names (generative lane). It is NEVER consulted for noul/choice/score decisions — those fall back NanoJev-ward or stay queued.
 
 ## Enrichment + escalation router (free first, paid last-resort, minimized by code)
 Priority ladder: **free local > self-hosted Legion > FREE external > paid**.
