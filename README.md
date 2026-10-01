@@ -5,7 +5,7 @@ One always-on box, HDMI to TV. Two jobs:
 2. **Smart cloud server** — SSD ingest cache + 1TB + 4TB HDD pool, auto phone upload, automatic classification, local secrets screening, Pi-hole ad-blocking.
 
 Target hardware: AMD Ryzen 5 PRO 4650U + Radeon iGPU, 14GB RAM, 238GB NVMe (cache), 1TB + 4TB HDDs (added later).
-AI offload machine: Legion 7, RTX 4080 Laptop 12GB VRAM + 32GB RAM (see `docs/10-legion-ai-server.md`).
+AI offload machine: Legion 7, RTX 4080 Laptop 12GB VRAM + 32GB RAM, dual-boot Windows 11 / CachyOS (see `docs/10-legion-ai-server.md`). May be offline — uploads queue as `pending-ai` until it returns.
 OS target: **Ubuntu 24.04 LTS + Plasma minimal + Kodi** (see `docs/`).
 
 ## Quick start (after OS flash)

@@ -1,64 +1,43 @@
 # 10 — Legion 7 AI Server Setup (do this WHILE the TV box installs)
 
-Your Legion 7 (RTX 4080 Laptop 12GB VRAM, 32GB RAM) is the GPU worker. The TV box has no useful GPU for AI, so all heavy models live here and the TV box calls them over Tailscale. Do this in parallel with `docs/01` step 6.
+Your Legion 7 (RTX 4080 Laptop 12GB VRAM, 32GB RAM) is the GPU worker. It dual-boots **Windows 11** and **CachyOS** — this doc covers **both**, plus what happens when the Legion is offline (it won't always be).
 
-Assumes stock **Windows 11**. (If you ever put Linux on the Legion, use `docker/ml-laptop/compose.yml` profile `ollama` instead of the native Ollama app below — same models, same env vars.)
+Shared facts (both OSes): Tailscale with per-boot hostnames `legion-win` / `legion-linux`, same models, same VRAM policy. The TV box tries `legion-linux` first, then `legion-win` (`LEGION_HOSTS` in `scripts/scan-secrets.sh`), so whichever OS is booted just works with no TV-box reconfig.
 
-## Step 1 — Base software (~20 min, mostly downloads)
-1. Install **Tailscale** (Windows), log in with the same account as the TV box. Note this machine's tailnet IP (`100.x.y.z`).
-2. Install **NVIDIA Game Ready / Studio driver** (recent) — required for GPU in WSL2 + Ollama.
-3. Install **WSL2 + Ubuntu**: `wsl --install -d Ubuntu` in an admin terminal, reboot if asked.
-4. Install **Docker Desktop** (WSL2 backend, default). In Settings → Resources → WSL integration, enable Ubuntu. GPU works inside WSL2 containers automatically with a recent NVIDIA driver — verify later with `docker run --rm --gpus all nvidia/cuda:12-cpu... ` (see step 4).
-5. Install **Ollama for Windows** (native app — simplest reliable GPU path, auto-updates). Native Ollama, not Docker, so VRAM isn't split with a VM layer.
-
-## Step 2 — Pull the models (the "Jeff" + OCR-vision set)
-In a terminal (`ollama` is on PATH after install):
-```powershell
-ollama pull qwen2.5:3b-instruct   # the "Jeff" role: secrets judge, ~2GB VRAM, seconds per snippet
-ollama pull moondream             # vision: screenshots / handwriting / nasty layouts, ~2GB VRAM
-# optional, only if you want chatty captions later:
-# ollama pull llava:7b            # ~5GB VRAM, best captions, slowest swap
+## Models (same list, both OSes — pull once per OS, ~10GB each side)
 ```
-Set Ollama to swap models instead of hoarding VRAM (Settings → or env):
+qwen2.5:3b-instruct   # the "Jeff" role: secrets judge, ~2GB VRAM, seconds per snippet
+moondream             # vision: screenshots / handwriting / nasty layouts, ~2GB VRAM
+# llava:7b            # optional captions, ~5GB VRAM — only if you want chatty descriptions
 ```
-OLLAMA_MAX_LOADED_MODELS=1
-OLLAMA_KEEP_ALIVE=5m
-```
-With this, asking the secrets judge unloads the caption model and vice versa — this **is** the orchestration for the LLM side: one resident model max, 5-minute eviction, everything else queues behind it. No extra tooling needed.
+Ollama env (both OSes): `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_KEEP_ALIVE=5m` — one resident model max, auto-swap. This is the LLM-side orchestration; nothing else needed.
 
-## Step 3 — Immich remote ML (Docker in WSL2, profile `photos`)
-```bash
-cd /path/to/tv-box-cloud-server/docker/ml-laptop
-docker compose --profile photos up -d
-```
-- This runs `immich-machine-learning:release-cuda` on `:3003`. **Version must match the TV box's Immich version** — update both together.
-- In Immich (on the TV box): Admin → ML Settings → add `http://<legion-tailnet-IP>:3003`.
-- VRAM while running: CLIP/SigLIP ~1–5GB + face models ~1GB. Don't run photo bulk-jobs at the same time as big caption jobs (see orchestration policy below).
+## Path A — Windows 11 (current daily driver for Dota 2)
+1. Install **Tailscale** (Windows), log in, set machine name `legion-win`. Note: use the *name*, not the IP, everywhere.
+2. Install recent **NVIDIA driver** (Game Ready or Studio).
+3. Install **Ollama for Windows** (native app). In Settings/env set the two vars above, and bind LAN access: `OLLAMA_HOST=0.0.0.0` + Windows Firewall rule allowing TCP 11434 from the Tailscale range (`100.64.0.0/10`) and LAN. Verify from TV box: `curl http://legion-win:11434/api/tags`.
+4. Install **WSL2 + Ubuntu** + **Docker Desktop** (WSL2 backend, Ubuntu integration on). For Immich remote ML: `docker compose --profile photos up -d` in `docker/ml-laptop` (runs `:3003`). In Immich Admin → ML Settings add `http://legion-win:3003`. Versions must match the TV box.
+5. `ollama pull qwen2.5:3b-instruct` + `ollama pull moondream`.
 
-## Step 4 — Verify GPU everywhere
-```bash
-# WSL2 Ubuntu:
-docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu24.04 nvidia-smi
-# Windows PowerShell:
-ollama run qwen2.5:3b-instruct "reply OK"
-```
-Then from the TV box: `curl http://<legion-tailnet-IP>:3003/` should answer, and `curl http://<legion-tailnet-IP>:11434/api/tags` should list Ollama models.
+## Path B — CachyOS (target once Dota is fixed)
+1. Boot CachyOS, install **Tailscale** (`sudo pacman -S tailscale; sudo systemctl enable --now tailscaled; sudo tailscale up`), set machine name `legion-linux`.
+2. NVIDIA + Docker (CachyOS ships recent kernels; use DKMS driver so updates don't break it):
+   ```bash
+   sudo pacman -S nvidia-dkms nvidia-utils docker docker-compose nvidia-container-toolkit
+   sudo systemctl enable --now docker
+   sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker
+   docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu24.04 nvidia-smi
+   ```
+3. Ollama native (`curl -fsSL https://ollama.com/install.sh | sh`), `/etc/systemd/system/ollama.service.d/override.conf` with the two env vars + `OLLAMA_HOST=0.0.0.0`, firewall (`ufw`/`firewalld`) open 11434 to tailnet/LAN only. `ollama pull` the same two models.
+4. Same compose profiles as Path A (`photos` for Immich ML `:3003`), same Immich admin step with `http://legion-linux:3003`.
+5. Note: model weights download twice (once per OS, separate disks). ~10GB each side — budget for it.
 
-## Orchestration policy (12GB VRAM can't hold everything — so don't try)
-| Workload | Where | VRAM | When |
-|---|---|---|---|
-| Secrets judge (`qwen2.5:3b`) | Ollama native | ~2GB | on demand, preempts (fast, seconds) |
-| Screenshot/vision OCR (`moondream`) | Ollama native | ~2GB | on demand, swaps with judge automatically |
-| Photo embeddings+faces (Immich ML) | Docker `:3003` | ~2–6GB | bulk overnight / idle; **stop before big doc-caption runs**: `docker compose --profile photos stop` |
-| Captions (`llava:7b`, optional) | Ollama native | ~5GB | queued behind the above, unloads after 5m idle |
+## When the Legion is offline (expected — it's a laptop)
+Default-deny queue on the TV box (full design: `docs/06-ai-classification.md`, worker: `scripts/ai-queue.sh` every 5 min via `configs/systemd/ai-queue.*`):
+- Uploads land in `inbox/` → Tier 0 deterministic scan runs immediately (TV-box CPU, always available) → hit goes to `quarantine/`, clean goes to `files/` tagged `pending-ai`.
+- `pending-ai` files are fully usable locally but **excluded from offsite/cloud copy and enrichment** until screened. Local USB restic backup still includes them (never leaves the premises — fine).
+- When any Legion OS comes online, the worker drains the queue oldest-first (Tier-1 judge, Immich re-triggers its own ML automatically; keep the TV-box CPU ML container enabled so photos still get faces slowly with zero Legion).
+- Nothing to configure per boot — the worker probes `legion-linux` then `legion-win` and uses whichever answers.
 
-Rules:
-1. One GPU job family at a time for big runs (photos overnight, documents on demand).
-2. Secrets checks always win — they're tiny and fast.
-3. Ollama side needs no manual work (max-1-loaded + keep-alive does the swap). Only Immich ML needs a manual stop/start around huge jobs.
-4. Nothing on this machine is exposed publicly — bind everything to Tailscale/LAN. The ML port has no auth.
-
-## What "done" looks like
-- [ ] `ollama list` shows `qwen2.5:3b-instruct` + `moondream`
-- [ ] Immich on TV box → ML URL set, test photo gets faces + search
-- [ ] `scripts/scan-secrets.sh` Tier-1 check reaches `http://<legion-tailnet-IP>:11434` (see `docs/06`)
+## Dota 2 on CachyOS (the migration blocker — agent task for the other device)
+Known-good checklist for your agent session on the Legion: CachyOS kernel + `nvidia-dkms` matching (reboot after updates), Steam via `steam` (native runtime, not flatpak, for shader cache sanity), Proton-GE via ProtonUp-Qt, verify game files, launch options `-vulkan` vs `-dx11` A/B, disable overlays/mango overlay conflicts, check `vulkaninfo` sees the 4080 (not iGPU). If the agent fixes it, Path B becomes home and Path A stays as fallback — no TV-box changes needed either way.

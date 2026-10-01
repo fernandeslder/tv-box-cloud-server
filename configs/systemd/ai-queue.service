@@ -1,0 +1,10 @@
+[Unit]
+Description=TV box AI queue drain (Tier-1 screening when Legion is online)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=htpc
+Environment="LEGION_HOSTS=legion-linux legion-win"
+ExecStart=/home/htpc/tv-box-cloud-server/scripts/ai-queue.sh
