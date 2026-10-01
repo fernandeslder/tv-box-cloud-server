@@ -1,4 +1,8 @@
 # Caddy is the only owner of :80/:443. Pi-hole web is on :8080.
+# CADDY_DOMAIN comes from docker/.env (e.g. home.lan), injected via compose environment.
+# NOTE: cross-stack names (immich-server, nextcloud...) resolve because the top-level
+# docker/compose.yml includes net+cloud into one project/network. Media-stack hosts
+# only answer once you enable docker/media/compose.yml.
 {
   admin off
 }
@@ -10,4 +14,28 @@
   handle {
     respond "tvbox up. see :3000 homepage, :3001 kuma." 200
   }
+}
+
+photos.{$CADDY_DOMAIN} {
+  reverse_proxy immich-server:2283
+}
+
+files.{$CADDY_DOMAIN} {
+  reverse_proxy nextcloud:8081
+}
+
+home.{$CADDY_DOMAIN} {
+  reverse_proxy homepage:3000
+}
+
+status.{$CADDY_DOMAIN} {
+  reverse_proxy uptime-kuma:3001
+}
+
+tv.{$CADDY_DOMAIN} {
+  reverse_proxy jellyfin:8096
+}
+
+music.{$CADDY_DOMAIN} {
+  reverse_proxy navidrome:4533
 }

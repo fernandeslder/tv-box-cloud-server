@@ -5,7 +5,7 @@ Beyond what you asked — all fit your taste, all free, all run on this box:
 1. **Jellyfin server** (`/dev/dri` VA-API) — local movie/show library on the pool, plays in Kodi + Jellyfin Desktop + phones. Pair with **Prowlarr/Sonarr/Radarr** (opt-in, route via Gluetun).
 2. **Paperless-ngx** — auto-ingest scans/PDFs from Nextcloud, OCR + full-text search. Complements the Tier-0/1 screening (it only ever sees clean files).
 3. **Navidrome — self-hosted Spotify (NEXT UP, already in `docker/media/compose.yml`)** — Subsonic-API music server, ~50MB RAM, reads pool `Music/` read-only (ingest sorts it). Phone apps (both FOSS): **Tempo** (GPL, recommended) or **Ultrasonic** (GPL). Web UI included. Handles playlists, transcodes FLAC→MP3 on the fly for mobile data. Start it the day your first albums land in `Music/`.
-4. **Audiobookshelf (NEXT UP, already in compose)** — audiobooks + podcasts, ~100MB RAM, own phone app with sleep timer + progress sync. Libraries point at pool `Other/audiobooks` + `Other/podcasts`. If you listen tooread at 2x, this is your app.
+4. **Audiobookshelf (NEXT UP, already in compose)** — audiobooks + podcasts, ~100MB RAM, own phone app with sleep timer + progress sync. Libraries point at pool `Other/audiobooks` + `Other/podcasts`. If you read at 2x, this is your app.
 5. **Homepage dashboard** at `home.lan` — one family page: Photos, Files, Music, Jellyfin, Pi-hole, qbit. Already in net stack — add Navidrome/Audiobookshelf tiles when they go live.
 5. **Scrutiny** — SMART web UI for the 1TB/4TB HDDs, email/Discord alerts before a disk dies.
 6. **Home Assistant** (optional, ~300MB) — TV-box can double as Zigbee/Z-Wave hub later; automate "movie mode" lights via HDMI-CEC trigger.

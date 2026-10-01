@@ -1,0 +1,10 @@
+[Unit]
+Description=Drain the upload inbox into sorted folders
+After=mnt-pool.mount
+Wants=mnt-pool.mount
+
+[Service]
+Type=oneshot
+User=htpc
+WorkingDirectory=/home/htpc/tv-box-cloud-server/scripts
+ExecStart=/home/htpc/tv-box-cloud-server/scripts/ingest.sh /mnt/pool/inbox

@@ -25,8 +25,7 @@ DIRS="$(cd "$ROOT" && find . -maxdepth 1 -mindepth 1 -type d -printf '%f\n' 2>/d
 EXCERPT="$(head -c 1500 "$CONTENT" 2>/dev/null || true)"
 
 summary_of() {  # $1=item $2=excerpt -> one short line (display only, never parsed for flow)
-  ./jev.sh fields '{"summary":"string"}' \
-    "Summarize this personal file in one short line. Name: $1. Content: $2" \
+  { echo "Summarize this personal file in one short line. Name: $1. Content: $2"; } | ./jev.sh fields '{"summary":"string"}' - \
     2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('summary','')}" 2>/dev/null || true
 }
 
@@ -42,14 +41,14 @@ for d in os.listdir(root):
     s = difflib.SequenceMatcher(None, norm(want), norm(d)).ratio()
     if s > score:
         best, score = d, s
-print(best if score >= 0.8 else "")
+print(best if score >= 0.82 else "")
 EOF
 }
 
 if [ -n "$DIRS" ]; then
   # ---- System 1 (Jev choice): fit existing, or NEW? ----
   OPTS="$(echo "$DIRS" | tr '\n' '|' | sed 's/|$//')|NEW"
-  S1="$(./jev.sh choice "File this personal item. Item name matters most, content second. Item: $ITEM. Content: $EXCERPT." "$OPTS")" || exit 2
+  S1="$( { echo "File this personal item. Item name matters most, content second. Item: $ITEM. Content: $EXCERPT."; } | ./jev.sh choice - "$OPTS")" || exit 2
   WANT="$(echo "$S1" | python3 -c "import json,sys; print(json.load(sys.stdin)['decision'])")"
   if [ "$WANT" != "NEW" ]; then
     CAT="$(fuzzy_dir "$ROOT" "$WANT")"
@@ -64,8 +63,7 @@ fi
 # ---- System 2: NEW pile (or empty root) — invent the category name ----
 LIST="$(echo "$DIRS" | tr '\n' ',' | sed 's/,$//')"
 [ -n "$LIST" ] || LIST="(none yet)"
-S2="$(./jev.sh fields '{"category":"string","summary":"string"}' \
-  "You organize personal files. Existing folders: $LIST. Item: $ITEM. Content: $EXCERPT. Invent ONE short folder name (1-3 words) fitting alongside the existing ones, specific enough to be useful, general enough to reuse. category = the folder name, summary = one short line about the item.")" || exit 2
+S2="$( { echo "You organize personal files. Existing folders: $LIST. Item: $ITEM. Content: $EXCERPT. Invent ONE short folder name (1-3 words) fitting alongside the existing ones, specific enough to be useful, general enough to reuse. category = the folder name, summary = one short line about the item."; } | JEV_MODEL="$SYS2_MODEL" ./jev.sh fields '{"category":"string","summary":"string"}' -)" || exit 2
 CAT2="$(echo "$S2" | python3 -c "import json,sys; print(json.load(sys.stdin).get('category',''))")"
 SUM2="$(echo "$S2" | python3 -c "import json,sys; print(json.load(sys.stdin).get('summary',''))")"
 CAT2="$(echo "$CAT2" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/[^A-Za-z0-9 _-]//g;s/[[:space:]]\+/ /g' | cut -c1-40)"

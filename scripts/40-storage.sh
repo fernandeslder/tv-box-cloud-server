@@ -3,10 +3,10 @@
 set -euo pipefail
 cd "$(dirname "$0")"; . ./lib.sh; need_root
 mkdir -p /mnt/disk1 /mnt/disk2 /mnt/pool /mnt/cache
-if [ -n "${STORAGE_DISK1_UUID:-}" ] && ! grep -q "$STORAGE_DISK1_UUID" /etc/fstab; then
+if [ -n "${STORAGE_DISK1_UUID:-}" ] && ! grep -qF -- "$STORAGE_DISK1_UUID" /etc/fstab; then
   echo "UUID=$STORAGE_DISK1_UUID /mnt/disk1 ext4 defaults,nofail,x-systemd.automount 0 2" >> /etc/fstab
 fi
-if [ -n "${STORAGE_DISK2_UUID:-}" ] && ! grep -q "$STORAGE_DISK2_UUID" /etc/fstab; then
+if [ -n "${STORAGE_DISK2_UUID:-}" ] && ! grep -qF -- "$STORAGE_DISK2_UUID" /etc/fstab; then
   echo "UUID=$STORAGE_DISK2_UUID /mnt/disk2 ext4 defaults,nofail,x-systemd.automount 0 2" >> /etc/fstab
 fi
 if ! grep -q "mergerfs" /etc/fstab; then

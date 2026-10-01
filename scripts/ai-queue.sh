@@ -9,9 +9,8 @@ cd "$(dirname "$0")"
 POOL="${POOL_ROOT:-/mnt/pool}"
 QUEUE="${AI_QUEUE_DIR:-$POOL/.ai-queue}"
 PRIVATE_DIR="$POOL/private"
-LEGION_HOSTS="${LEGION_HOSTS:-legion-linux legion-win}"
-JUDGE_MODEL="${JUDGE_MODEL:-qwen2.5:3b-instruct}"
 VISION_MODEL="${VISION_MODEL:-moondream}"
+LEGION_HOSTS="${LEGION_HOSTS:-legion-linux legion-win}"
 
 legion_up() {
   for h in $LEGION_HOSTS; do
@@ -21,13 +20,13 @@ legion_up() {
 }
 
 vision_transcript() {  # $1=ollama-base $2=image -> stdout transcript of visible text
-  python3 - "$1" "$2" <<'EOF'
+  python3 - "$1" "$2" "${VISION_MODEL:-moondream}" <<'EOF'
 import json, sys, base64, urllib.request
-base, img = sys.argv[1], sys.argv[2]
+base, img, model = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(img, 'rb') as f:
     b64 = base64.b64encode(f.read()).decode()
 req = urllib.request.Request(base + '/api/generate',
-    json.dumps({'model': 'moondream',
+    json.dumps({'model': model,
                 'prompt': 'Transcribe any text, codes, or passwords visible in this image. If none, reply NONE.',
                 'images': [b64], 'stream': False}).encode())
 print(json.load(urllib.request.urlopen(req, timeout=300)).get('response', 'NONE'))
@@ -48,13 +47,15 @@ route_transcript() {
   decision="$(router_decide "$verdict" "$conf")"
   case "$decision" in
     LOCAL)   echo "CLEAN $target (local, conf $conf)"; return 0 ;;
-    BLOCKED) echo "FLAGGED $target -> private/"; mv "$target" "$PRIVATE_DIR/" 2>/dev/null || true; return 1 ;;
+    BLOCKED) if ./safe-move.sh "$target" "$PRIVATE_DIR" >/dev/null 2>&1 && [ ! -e "$target" ]; then echo "FLAGGED $target -> private/"; return 1; else echo "MOVE-FAILED $target (stays queued)"; return 2; fi ;;
     DEFER)   echo "NEEDS-PAID $target (conf $conf, over budget/off — stays queued)"; return 2 ;;
     PAID)
       echo "ESCALATING $target (conf $conf) — transcript only, ~4KB"
       rc=0; router_paid_opinion "$txt" || rc=$?
       if [ "$rc" -eq 0 ]; then echo "CLEAN $target (paid second opinion)"; return 0; fi
-      if [ "$rc" -eq 1 ]; then echo "FLAGGED $target -> private/ (paid confirms)"; mv "$target" "$PRIVATE_DIR/" 2>/dev/null || true; return 1; fi
+      if [ "$rc" -eq 1 ]; then
+        if ./safe-move.sh "$target" "$PRIVATE_DIR" >/dev/null 2>&1 && [ ! -e "$target" ]; then echo "FLAGGED $target -> private/ (paid confirms)"; return 1; else echo "MOVE-FAILED $target (stays queued)"; return 2; fi
+      fi
       echo "PAID-FAILED $target (stays queued)"; return 2 ;;
   esac
 }
@@ -63,10 +64,11 @@ HOST="$(legion_up)" || { echo "legion offline, queue waits"; exit 0; }
 OLLAMA="http://$HOST:11434"
 export LEGION_OLLAMA="$OLLAMA"
 export WHISPER_URL="http://$HOST:9000"
-export JUDGE_MODEL VISION_MODEL
 echo "legion reachable via $HOST, draining $QUEUE (paid: $PAID_ENABLED, min-conf: $ROUTER_CONFIDENCE_MIN)"
 
 mkdir -p "$QUEUE/done" "$PRIVATE_DIR"
+# Sweep our own stale secret-bearing temp files (belt + suspenders for the rms below).
+rm -f /tmp/tmp.*.judge 2>/dev/null || true
 for job in "$QUEUE"/*.pending; do
   [ -e "$job" ] || { echo "queue empty"; exit 0; }
   target="$(head -n 1 "$job")"
@@ -76,7 +78,7 @@ for job in "$QUEUE"/*.pending; do
     *.jpg|*.jpeg|*.png|*.gif|*.webp|*.JPG|*.PNG)
       transcript="$(mktemp)"
       if ! vision_transcript "$OLLAMA" "$target" > "$transcript"; then
-        rm -f "$transcript"; echo "VISION-BUSY $target (stays queued)"; continue
+        rm -f "$transcript" "$transcript.judge"; echo "VISION-BUSY $target (stays queued)"; continue
       fi
       if grep -qi '^NONE' "$transcript"; then
         echo "CLEAN $target (no text visible, Immich will index it)"
@@ -85,10 +87,10 @@ for job in "$QUEUE"/*.pending; do
         # work permit never goes to any API — not even the Legion LLM.
         rc0=0; ./sort-docs.sh --stage0 "$target" "$transcript" >/dev/null 2>&1 || rc0=$?
         if [ "$rc0" -eq 0 ]; then
-          rm -f "$transcript"
+          rm -f "$transcript" "$transcript.judge"
         else
           rc=0; route_transcript "$transcript" "$target" || rc=$?
-          rm -f "$transcript"
+          rm -f "$transcript" "$transcript.judge"
           [ "$rc" -eq 2 ] && continue
         fi
       fi
@@ -100,27 +102,27 @@ for job in "$QUEUE"/*.pending; do
       transcript="$(mktemp)"
       rc=0; NOMOVE=1 ./sort-music.sh "$target" > "$transcript" 2>/dev/null || rc=$?
       if [ "$rc" -eq 0 ]; then
-        rm -f "$transcript"   # organized as Music/<Artist>/[Album]/
+        rm -f "$transcript" "$transcript.judge"   # organized as Music/<Artist>/[Album]/
       elif [ "$rc" -eq 1 ]; then
         rc=0; route_transcript "$transcript" "$target" || rc=$?
-        rm -f "$transcript"
+        rm -f "$transcript" "$transcript.judge"
         if [ "$rc" -eq 1 ]; then
           : # route_transcript already moved it to private/
         elif [ "$rc" -eq 0 ]; then
-          mkdir -p "$POOL/Recordings"
-          dest="$POOL/Recordings/$(basename "$target")"
-          [ -e "$dest" ] && dest="$POOL/Recordings/$(date +%s)-$(basename "$target")"
-          mv "$target" "$dest" 2>/dev/null || true
+          if dest="$(./safe-move.sh "$target" "$POOL/Recordings")" && [ ! -e "$target" ]; then :; else echo "MOVE-FAILED $target (stays queued)"; continue; fi
         else
           continue   # defer, file untouched, stays queued
         fi
       else
-        rm -f "$transcript"; echo "AUDIO-BUSY $target (stays queued)"; continue
+        rm -f "$transcript" "$transcript.judge"; echo "AUDIO-BUSY $target (stays queued)"; continue
       fi
       ;;
     *)
-      if [ -f "$job.txt" ] || [ -f "${job%.pending}.txt" ]; then
-        txt="$job.txt"; [ -f "$txt" ] || txt="${job%.pending}.txt"
+      # Sidecar naming matches ingest: <base>.pending + <base>.transcript
+      # (legacy <stem>.txt sidecars still honored).
+      if [ -f "${job%.pending}.transcript" ] || [ -f "$job.txt" ] || [ -f "${job%.pending}.txt" ]; then
+        txt="${job%.pending}.transcript"
+        [ -f "$txt" ] || txt="$job.txt"; [ -f "$txt" ] || txt="${job%.pending}.txt"
         rc=0; route_transcript "$txt" "$target" || rc=$?
         [ "$rc" -eq 2 ] && continue
         if [ "$rc" -eq 0 ]; then
@@ -134,6 +136,6 @@ for job in "$QUEUE"/*.pending; do
       fi
       ;;
   esac
-  rm -f "$job.txt" "${job%.pending}.txt" 2>/dev/null || true
+  rm -f "$job.txt" "${job%.pending}.txt" "${job%.pending}.transcript" 2>/dev/null || true
   mv "$job" "$QUEUE/done/"
 done

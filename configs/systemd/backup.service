@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly restic backup of the pool to USB
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/home/htpc/tv-box-cloud-server/backups/backup.sh

@@ -39,16 +39,14 @@ for src in "$INBOX"/*; do
   [ -f "$src" ] || continue
   base="$(basename "$src")"
   type="$(filetype "$src")"
-  dest="$POOL/$type/$base"
-  if ! mv -n "$src" "$dest" 2>/dev/null; then
-    dest="$POOL/$type/$(date +%s)-$base"
-    mv "$src" "$dest"
-  fi
+  # safe-move: same content -> duplicates/ (you review), different -> "name (1).ext". Never overwrites.
+  dest="$(./safe-move.sh "$src" "$POOL/$type")"
+  base="$(basename "$dest")"
   echo "SORTED [$type] $base"
 
   if [ "$type" = "Documents" ]; then
-    stem="${base%.*}"
-    txt="$QUEUE/$stem.txt"
+    # Job/sidecar names keep the FULL basename (a.pdf + a.txt must not collide).
+    txt="$QUEUE/$base.transcript"
     extract_text "$dest" "$txt"
     rc=0; ./scan-secrets.sh "$dest" >/dev/null 2>&1 || rc=$?
     if [ "$rc" -eq 0 ]; then
@@ -57,22 +55,24 @@ for src in "$INBOX"/*; do
       rc0=0; ./sort-docs.sh --stage0 "$dest" "$txt" >/dev/null 2>&1 || rc0=$?
       if [ "$rc0" -eq 0 ]; then
         echo "PRIVATE-SORTED $base (no queue)"
+        rm -f "$txt"
       else
         echo "CLEAN $base -> queued Tier-1"
-        echo "$dest" > "$QUEUE/$stem.pending"
+        echo "$dest" > "$QUEUE/$base.pending"
       fi
     elif [ "$rc" -eq 1 ]; then
       echo "SECRETS $base -> sub-sorting private/"
       ./sort-docs.sh --stage0 "$dest" "$txt" >/dev/null 2>&1 \
-        || mv "$dest" "$POOL/private/"
+        || ./safe-move.sh "$dest" "$POOL/private" >/dev/null
+      rm -f "$txt"
     else
       echo "UNSCANNED $base (scanner unavailable) -> stays pending-ai"
-      echo "$dest" > "$QUEUE/$stem.pending"
+      echo "$dest" > "$QUEUE/$base.pending"
     fi
   else
     # Photos/Videos/Music/Other: text-scan skipped at ingest (CPU OCR on everything is too slow).
     # Vision screening happens on the Legion via ai-queue.sh — allowed, it's yours.
-    echo "$dest" > "$QUEUE/${base%.*}.pending"
+    echo "$dest" > "$QUEUE/$base.pending"
     echo "QUEUED [$type] $base (pending-ai)"
   fi
 done

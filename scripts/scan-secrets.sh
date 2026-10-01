@@ -11,7 +11,8 @@ cd "$(dirname "$0")"
 if [ "${1:-}" = "--llm" ]; then
   FILE="${2:?usage: scan-secrets.sh --llm <text-file>}"
   # Jev noul decision (structured, typed) — never grep prose. See jev.sh.
-  OUT="$(./jev.sh noul "Does this text contain secret credentials (API keys, passwords, auth tokens, private keys)? Text: $(head -c 6000 "$FILE")")" || exit 2
+  # Prompt via stdin (never argv): transcripts must not appear in process listings.
+  OUT="$( { echo "Does this text contain secret credentials (API keys, passwords, auth tokens, private keys)? Text:"; head -c 6000 "$FILE"; } | ./jev.sh noul - )" || exit 2
   DEC="$(echo "$OUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['decision'])")"
   CON="$(echo "$OUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['confidence'])")"
   if [ "$DEC" = "yes" ]; then echo "VERDICT: SECRET, CONFIDENCE: $CON"; exit 1; fi
@@ -22,5 +23,6 @@ TARGET="${1:?usage: scan-secrets.sh <file-or-dir>}"
 command -v docker >/dev/null 2>&1 || { echo "scan-secrets: docker missing, Tier-0 unavailable" >&2; exit 2; }
 MOUNT="$(realpath "$TARGET")"
 # --no-verification: never phone providers to "verify" a live key.
-docker run --rm -v "$MOUNT:/scan:ro" trufflesecurity/trufflehog:latest \
+# Pinned (not :latest) + timeout: hangs and surprise updates must not stall ingest.
+timeout 120 docker run --rm -v "$MOUNT:/scan:ro" trufflesecurity/trufflehog:3.97.9 \
   filesystem /scan --no-verification --fail

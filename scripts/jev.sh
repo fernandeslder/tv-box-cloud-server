@@ -50,17 +50,6 @@ except Exception as e:
 EOF
 }
 
-call() {  # $1=json-schema $2=prompt -> stdout raw JSON; Legion S1 first, NanoJev fallback
-  local out
-  if out="$(fetch "$JEV_URL" "$JEV_MODEL" "$1" "$2")"; then echo "$out"; return 0; fi
-  if [ -n "$JEV_FALLBACK_MODEL" ]; then
-    if out="$(fetch "$JEV_FALLBACK_URL" "$JEV_FALLBACK_MODEL" "$1" "$2")"; then
-      echo "$out"; return 0
-    fi
-  fi
-  return 2
-}
-
 # Validators: $1 = raw content -> stdout normalized JSON, rc 2 if not a real decision.
 # A malformed answer counts as "can't decide" and DOES trigger NanoJev fallback.
 v_noul() {
@@ -110,19 +99,25 @@ call() {  # $1=schema $2=prompt $3=validator -> normalized JSON; Legion S1, then
   return 2
 }
 CMD="${1:?usage: jev.sh noul|choice|score|fields ...}"; shift
+# Prompt "-": read the prompt from stdin instead of argv, so secret-bearing
+# text never appears in process listings. Callers handling transcripts must use it.
 case "$CMD" in
   noul)
+    if [ "$1" = "-" ]; then set -- "$(cat)"; fi
     call '{"type":"object","properties":{"decision":{"type":"string"},"confidence":{"type":"number"}},"required":["decision","confidence"]}' "$1" v_noul || exit 2
     ;;
   choice)
+    if [ "$1" = "-" ]; then set -- "$(cat)" "$2"; fi
     OPTS="$2"
     SCHEMA="$(python3 -c "import json,sys; print(json.dumps({'type':'object','properties':{'decision':{'type':'string','enum':sys.argv[1].split('|')},'confidence':{'type':'number'}},'required':['decision','confidence']}))" "$OPTS")"
     OPTS_CSV="$OPTS" call "$SCHEMA" "$1" v_choice || exit 2
     ;;
   score)
+    if [ "$1" = "-" ]; then set -- "$(cat)"; fi
     call '{"type":"object","properties":{"score":{"type":"number"}},"required":["score"]}' "$1" v_score || exit 2
     ;;
   fields)
+    if [ "$2" = "-" ]; then set -- "$1" "$(cat)"; fi
     call "{\"type\":\"object\",\"properties\":$1,\"required\":[]}" "$2" v_json || exit 2
     ;;
   *) echo "usage: jev.sh noul|choice|score|fields ..." >&2; exit 2;;

@@ -2,7 +2,7 @@
 
 Your Legion 7 (RTX 4080 Laptop 12GB VRAM, 32GB RAM) is the GPU worker. It dual-boots **Windows 11** and **CachyOS** — this doc covers **both**, plus what happens when the Legion is offline (it won't always be).
 
-Shared facts (both OSes): Tailscale with per-boot hostnames `legion-win` / `legion-linux`, same models, same VRAM policy. The TV box tries `legion-linux` first, then `legion-win` (`LEGION_HOSTS` in `scripts/scan-secrets.sh`), so whichever OS is booted just works with no TV-box reconfig.
+Shared facts (both OSes): Tailscale with per-boot hostnames `legion-win` / `legion-linux`, same models, same VRAM policy. The TV box tries `legion-linux` first, then `legion-win` (`LEGION_HOSTS` in `scripts/ai-queue.sh`), so whichever OS is booted just works with no TV-box reconfig.
 
 ## Models (same list, both OSes — pull once per OS, ~10GB each side)
 ```

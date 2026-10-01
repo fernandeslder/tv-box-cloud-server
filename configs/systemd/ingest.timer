@@ -1,0 +1,9 @@
+[Unit]
+Description=Hourly ingest safety net (catches anything the path trigger missed)
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target

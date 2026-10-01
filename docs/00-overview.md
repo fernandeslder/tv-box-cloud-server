@@ -20,14 +20,14 @@ TV <—HDMI— [TV BOX] AMD Ryzen 5 PRO 4650U, 14GB, 238GB NVMe
   Docker (SSD: /mnt/cache, HDD pool: /mnt/pool):
     net:    pihole:53 + unbound:5335 + caddy:80/443 + dockge + homepage + uptime-kuma
     cloud:  immich-server + postgres + redis (SSD) + originals on /mnt/pool/immich
-            nextcloud (files on /mnt/pool/files) + presidio-analyzer (PII gate) + restic
+            nextcloud (files on /mnt/pool/files) + restic
     media:  jellyfin (/dev/dri VA-API) + gluetun + qbittorrent (opt-in)
 
 Phones --1Gbps LAN--> Caddy (*.home.lan) --> Immich/Nextcloud
   Immich app (photos) + Nextcloud app (docs)
 
 Laptop (12GB VRAM) --Tailscale--> immich-machine-learning:cuda + ollama (moondream/llava)
-  Immich server fans out to remote ML URL; Presidio blocks PII before any cloud fallback.
+  Immich server fans out to remote ML URL; secrets screening (TruffleHog + Jev) runs before any outside API.
 
 Router DHCP --> DNS = Pi-hole IP. Pi-hole upstream = Unbound (recursive, no third party).
 Remote: Tailscale Split-DNS --> Pi-hole tailnet IP --> Caddy. No port forwards.

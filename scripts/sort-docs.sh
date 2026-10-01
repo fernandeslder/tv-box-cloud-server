@@ -12,11 +12,9 @@ POOL="${POOL_ROOT:-/mnt/pool}"
 MODE="${1:?usage: sort-docs.sh --stage0|--stage1 <file> <transcript>}"
 FILE="${2:?}"; TXT="${3:-/dev/null}"
 
-place() {  # $1=dest-dir — collision-safe move
-  mkdir -p "$POOL/$1"
-  local t="$POOL/$1/$(basename "$FILE")"
-  [ -e "$t" ] && t="$POOL/$1/$(date +%s)-$(basename "$FILE")"
-  mv "$FILE" "$t"; echo "DOC $t" >&2; echo "$t"
+place() {  # $1=dest-dir — collision-safe via safe-move.sh (hash-checked, never overwrites)
+  local t
+  t="$(./safe-move.sh "$FILE" "$POOL/$1")"; echo "DOC $t" >&2; echo "$t"
 }
 
 if [ "$MODE" = "--stage0" ]; then

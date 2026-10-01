@@ -10,8 +10,10 @@ services:
     env_file:
       - .env.immich
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   immich-machine-learning:
     # CPU fallback on tvbox. Prefer remote CUDA on laptop (see ../ml-laptop).
@@ -27,12 +29,22 @@ services:
       - ${CACHE_ROOT:-/mnt/cache}/immich-pg:/var/lib/postgresql/data
     env_file:
       - .env.immich
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${DB_USERNAME:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:alpine
     restart: unless-stopped
     volumes:
       - ${CACHE_ROOT:-/mnt/cache}/immich-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   nextcloud:
     image: nextcloud:stable-apache
@@ -56,18 +68,6 @@ services:
       MYSQL_DATABASE: nextcloud
       MYSQL_USER: nextcloud
       MYSQL_PASSWORD: ${IMMICH_DB_PASSWORD:?set in .env}
-
-  presidio-analyzer:
-    image: mcr.microsoft.com/presidio-analyzer:latest
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:5002:3000"
-
-  presidio-anonymizer:
-    image: mcr.microsoft.com/presidio-anonymizer:latest
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:5001:3000"
 
 volumes:
   immich-model-cache:

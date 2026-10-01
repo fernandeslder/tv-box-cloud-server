@@ -1,0 +1,8 @@
+[Unit]
+Description=Run ingest when files land in the inbox
+
+[Path]
+PathChanged=/mnt/pool/inbox
+
+[Install]
+WantedBy=multi-user.target

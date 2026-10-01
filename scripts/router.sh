@@ -119,11 +119,10 @@ router_paid_opinion() {
 # Only providers with a key set are listed. "openrouter" uses the daily cheapest-paid pick.
 effective_paid_order() {
   python3 - "$PRICES_FILE" "$PAID_PROVIDER_ORDER" \
-    "GROQ_API_KEY=${GROQ_API_KEY:-} GEMINI_API_KEY=${GEMINI_API_KEY:-} OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}" \
     "OPENROUTER_MODEL=${OPENROUTER_MODEL:-}" <<'EOF'
-import json, sys
-prices_path, order, keyenv, or_model = sys.argv[1], sys.argv[2].split(), dict(
-    kv.split("=", 1) for kv in sys.argv[3].split()), sys.argv[4]
+import json, os, sys
+prices_path, order, or_model = sys.argv[1], sys.argv[2].split(), sys.argv[3]
+keyenv = {k: v for k, v in os.environ.items() if k.endswith("_API_KEY")}
 keys = {k.replace("_API_KEY", "").lower(): bool(v) for k, v in keyenv.items()}
 costs = {}
 try:
@@ -142,18 +141,21 @@ EOF
 }
 
 # free_opencode_call <transcript> -> stdout verdict text. 0 ok, 2 unavailable.
+# Prompt travels via stdin (proven: `opencode run` reads stdin), never argv — ps-safe.
 free_opencode_call() {
   local txt="${1:?}" prompt
   command -v opencode >/dev/null 2>&1 || return 2
   prompt="Does the following text contain secret credentials (API keys, passwords, auth tokens, private keys)? Reply first line EXACTLY: VERDICT: CLEAN or VERDICT: SECRET, CONFIDENCE: 0-100. Text: $(head -c 6000 "$txt")"
-  timeout "$OPENCODE_TIMEOUT" opencode run --model "$OPENCODE_MODEL" "$prompt" 2>/dev/null || return 2
+  printf '%s' "$prompt" | timeout "$OPENCODE_TIMEOUT" opencode run --model "$OPENCODE_MODEL" 2>/dev/null || return 2
 }
 
 # paid_openai_call <base-url> <model> <key> <transcript> -> stdout verdict text
+# Key travels via env (OPENAI_KEY), transcript is read from file inside python — ps-safe.
 paid_openai_call() {
-  python3 - "$1" "$2" "$3" "$4" <<'EOF'
-import json, sys, urllib.request
-base, model, key, path = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+  OPENAI_KEY="$3" python3 - "$1" "$2" "$4" <<'EOF'
+import json, os, sys, urllib.request
+base, model, path = sys.argv[1], sys.argv[2], sys.argv[3]
+key = os.environ["OPENAI_KEY"]
 text = open(path).read()[:4000]
 prompt = ("Does this text contain secret credentials (API keys, passwords, auth tokens, private keys)? "
           "Reply first line EXACTLY: VERDICT: CLEAN or VERDICT: SECRET, CONFIDENCE: 0-100. Text: " + text)

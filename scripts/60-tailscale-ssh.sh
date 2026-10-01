@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"; . ./lib.sh; need_root
 if ! have tailscale; then
-  curl -fsSL https://tailscale.com/install.sh | sh
+  curl -fsSL -m 60 --retry 3 https://tailscale.com/install.sh | sh
 else
   log "tailscale already present"
 fi

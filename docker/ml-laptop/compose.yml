@@ -38,7 +38,7 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    # then: ollama pull qwen2.5:3b-instruct  (secrets judge, "Jeff" role)
+    # then: ollama pull qwen2.5:3b-instruct  (Jev, System 1 decision engine)
     #       ollama pull moondream            (screenshot/vision OCR assist)
     #       ollama pull llava:7b             (optional captions)
 

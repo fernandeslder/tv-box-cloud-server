@@ -9,7 +9,7 @@ cd "$(dirname "$0")"
 CONF_DIR="./../configs"
 SNAP="${1:-}"
 [ -n "$SNAP" ] || { SNAP="$(mktemp)"; trap 'rm -f "$SNAP"' EXIT
-  curl -sf -m 60 https://openrouter.ai/api/v1/models -o "$SNAP"; }
+  curl -sf -m 60 --retry 3 https://openrouter.ai/api/v1/models -o "$SNAP"; }
 
 python3 - "$SNAP" "$CONF_DIR/prices.json" "$CONF_DIR/router.managed.conf" <<'EOF'
 import json, sys, datetime

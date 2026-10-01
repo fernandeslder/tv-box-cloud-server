@@ -1,5 +1,5 @@
 [Unit]
-Description=TV box AI queue drain (Tier-1 screening when Legion is online)
+Description=Drain AI queue every 5 minutes (singleton — overlapping runs exit quietly)
 After=network-online.target docker.service
 Wants=network-online.target
 
@@ -7,4 +7,4 @@ Wants=network-online.target
 Type=oneshot
 User=htpc
 Environment="LEGION_HOSTS=legion-linux legion-win"
-ExecStart=/home/htpc/tv-box-cloud-server/scripts/ai-queue.sh
+ExecStart=/usr/bin/flock -n /tmp/ai-queue.lock /home/htpc/tv-box-cloud-server/scripts/ai-queue.sh

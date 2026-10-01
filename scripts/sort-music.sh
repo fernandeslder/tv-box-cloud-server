@@ -19,8 +19,7 @@ ALBUM="$(tags | grep -i '^album=' | cut -d= -f2- | head -n1 || true)"
 jev_split() {  # $1=basename-noext -> "ARTIST<TAB>TITLE" (Jev fields decision, typed)
   local out artist title only
   ARTISTS="$(cd "$POOL/Music" 2>/dev/null && find . -maxdepth 1 -mindepth 1 -type d -printf '%f\n' 2>/dev/null | sort | head -n 30 | tr '\n' ',' | sed 's/,$//')"
-  out="$(./jev.sh fields '{"artist":"string","title":"string","title_only":"boolean"}' \
-    "You know music: artists, songs, albums. Music filename (may be 'Artist - Title', 'Title - Artist', or just 'Title'; words may run together): $1. Artists already in library: $ARTISTS. artist = the performing artist (use your knowledge; empty string if truly unidentifiable), title = the song name, title_only = true if no artist is identifiable.")" || return 2
+  out="$( { echo "You know music: artists, songs, albums. Music filename (may be 'Artist - Title', 'Title - Artist', or just 'Title'; words may run together): $1. Artists already in library: $ARTISTS. artist = the performing artist (use your knowledge; empty string if truly unidentifiable), title = the song name, title_only = true if no artist is identifiable."; } | ./jev.sh fields '{"artist":"string","title":"string","title_only":"boolean"}' -)" || return 2
   artist="$(echo "$out" | python3 -c "import json,sys; print(json.load(sys.stdin).get('artist',''))")"
   title="$(echo "$out" | python3 -c "import json,sys; print(json.load(sys.stdin).get('title',''))")"
   only="$(echo "$out" | python3 -c "import json,sys; print('yes' if json.load(sys.stdin).get('title_only') else 'no')")"
@@ -49,18 +48,16 @@ if ! curl -sf -m 300 -F file=@"$FILE" -F response_format=json \
     "$WHISPER_URL/v1/audio/transcriptions" -o "$TRANSCRIPT" 2>/dev/null; then
   rm -f "$TRANSCRIPT"; echo "sort-music: whisper unreachable" >&2; exit 2
 fi
-WORDS="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('text',''))" "$TRANSCRIPT" | wc -w)"
+TEXT="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('text',''))" "$TRANSCRIPT" 2>/dev/null)" || { rm -f "$TRANSCRIPT"; echo "sort-music: bad whisper JSON" >&2; exit 2; }
+WORDS="$(echo "$TEXT" | wc -w)"
 if [ "$WORDS" -ge 8 ]; then
-  SPOKEN="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('text',''))" "$TRANSCRIPT")"
+  SPOKEN="$TEXT"
   rm -f "$TRANSCRIPT"
   if [ "${NOMOVE:-0}" = "1" ]; then
     # Caller decides placement (ai-queue routes the transcript first).
     echo "$SPOKEN"; exit 1
   fi
-  mkdir -p "$POOL/Recordings"
-  dest="$POOL/Recordings/$(basename "$FILE")"
-  [ -e "$dest" ] && dest="$POOL/Recordings/$(date +%s)-$(basename "$FILE")"
-  mv "$FILE" "$dest"
+  dest="$(./safe-move.sh "$FILE" "$POOL/Recordings")"
   echo "$SPOKEN"
   echo "SPEECH $dest ($WORDS words)" >&2
   exit 1
@@ -97,8 +94,5 @@ if [ -n "$MATCH" ]; then ARTIST="$MATCH"; else ARTIST="$(clean "$ARTIST")"; fi
 ALBUM="$(clean "$ALBUM")"
 dest="$POOL/Music/$ARTIST"
 [ -n "$ALBUM" ] && dest="$dest/$ALBUM"
-mkdir -p "$dest"
-target="$dest/$(basename "$FILE")"
-[ -e "$target" ] && target="$dest/$(date +%s)-$(basename "$FILE")"
-mv "$FILE" "$target"
+target="$(./safe-move.sh "$FILE" "$dest")"
 echo "MUSIC $target" >&2
