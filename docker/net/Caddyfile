@@ -3,39 +3,58 @@
 # NOTE: cross-stack names (immich-server, nextcloud...) resolve because the top-level
 # docker/compose.yml includes net+cloud into one project/network. Media-stack hosts
 # only answer once you enable docker/media/compose.yml.
+#
+# TLS: .home.lan is not publicly resolvable, so Caddy gets `tls internal`
+# (local CA). Trust it once per device: phones need the root cert installed
+# (see docs/11-phone-setup.md) or use http://<box-LAN-IP>:<port> for LAN-only apps.
+# If you own a real domain, switch to DNS-01 (Cloudflare) and drop `tls internal`.
 {
-  admin off
+	admin off
 }
 
 {$CADDY_DOMAIN} {
-  handle_path /pihole* {
-    reverse_proxy pihole:8080
-  }
-  handle {
-    respond "tvbox up. see :3000 homepage, :3001 kuma." 200
-  }
+	tls internal
+	handle_path /pihole* {
+		reverse_proxy pihole:8080
+	}
+	handle {
+		respond "tvbox up. see :3000 homepage, :3001 kuma." 200
+	}
 }
 
 photos.{$CADDY_DOMAIN} {
-  reverse_proxy immich-server:2283
+	tls internal
+	reverse_proxy immich-server:2283
 }
 
 files.{$CADDY_DOMAIN} {
-  reverse_proxy nextcloud:8081
+	tls internal
+	# Nextcloud behind a proxy needs trusted_proxies + overwriteprotocol=https
+	# in config.php — one-liner in docs/04-storage-smart-cloud.md.
+	reverse_proxy nextcloud:8081
 }
 
 home.{$CADDY_DOMAIN} {
-  reverse_proxy homepage:3000
+	tls internal
+	reverse_proxy homepage:3000
 }
 
 status.{$CADDY_DOMAIN} {
-  reverse_proxy uptime-kuma:3001
+	tls internal
+	reverse_proxy uptime-kuma:3001
+}
+
+metrics.{$CADDY_DOMAIN} {
+	tls internal
+	reverse_proxy beszel:8090
 }
 
 tv.{$CADDY_DOMAIN} {
-  reverse_proxy jellyfin:8096
+	tls internal
+	reverse_proxy jellyfin:8096
 }
 
 music.{$CADDY_DOMAIN} {
-  reverse_proxy navidrome:4533
+	tls internal
+	reverse_proxy navidrome:4533
 }

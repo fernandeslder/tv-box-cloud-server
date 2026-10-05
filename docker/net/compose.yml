@@ -1,14 +1,28 @@
 services:
   unbound:
-    image: mvance/unbound:latest
+    # Pinned: :latest floats + the stock entrypoint would generate a
+    # Cloudflare-DoT default. We mount our own recursive config instead
+    # (./unbound.conf, DNSSEC, no third party). The entrypoint still runs
+    # unbound-anchor, so DNSSEC works out of the box.
+    image: mvance/unbound:1.22.0
     restart: unless-stopped
     volumes:
-      - ./data/unbound:/opt/unbound/etc/unbound:ro
+      - ./unbound.conf:/opt/unbound/etc/unbound/unbound.conf:ro
+    # The image's built-in healthcheck queries port 53; we listen on 5335,
+    # so override it (a permanently-"unhealthy" DNS container confuses everyone).
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/5335' || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
     labels:
       - com.centurylinklabs.watchtower.enable=false
 
   pihole:
-    image: pihole/pihole:latest
+    # Pinned date tag (Pi-hole uses YYYY.MM.x tags, no :v6 major tag).
+    # Update deliberately per docs/08 — never :latest on DNS.
+    image: pihole/pihole:2026.09.0
     restart: unless-stopped
     ports:
       - "53:53/tcp"
@@ -40,6 +54,8 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./data/caddy-data:/data
       - ./data/caddy-config:/config
+    depends_on:
+      - pihole
     labels:
       - com.centurylinklabs.watchtower.enable=true
 
@@ -74,6 +90,44 @@ services:
       - "3001:3001"
     volumes:
       - ./data/uptime-kuma:/app/data
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  # Lightweight metrics (README/docs promise this; was missing from compose).
+  # Hub UI :8090, behind Caddy as metrics.<domain>. Pairing (once):
+  #   1. open metrics.home.lan -> Add System, copy the shown KEY + TOKEN
+  #   2. put them in docker/.env as BESZEL_KEY / BESZEL_TOKEN
+  #   3. docker compose --profile agent up -d
+  # The agent talks to the hub over a shared socket — no extra ports.
+  # EXTRA disk mounts let the agent report both pool disks.
+  beszel:
+    image: henrygd/beszel:latest
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./data/beszel:/beszel_data
+      - ./data/beszel-socket:/beszel_socket
+    environment:
+      TZ: ${TZ:-Europe/London}
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  beszel-agent:
+    profiles: ["agent"]
+    image: henrygd/beszel-agent:latest
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./data/beszel-agent:/var/lib/beszel-agent
+      - ./data/beszel-socket:/beszel_socket
+      - /mnt/disk1:/extra-filesystems/disk1:ro
+      - /mnt/disk2:/extra-filesystems/disk2:ro
+    environment:
+      LISTEN: /beszel_socket/beszel.sock
+      KEY: ${BESZEL_KEY:-}
+      TOKEN: ${BESZEL_TOKEN:-}
     labels:
       - com.centurylinklabs.watchtower.enable=true
 

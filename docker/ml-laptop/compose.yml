@@ -3,10 +3,15 @@
 # GPU rule: one workload family at a time. Ollama side self-swaps
 # (OLLAMA_MAX_LOADED_MODELS=1 + KEEP_ALIVE); stop the photos profile
 # before huge doc-caption runs and restart after.
+# Version lockstep: IMMICH_VERSION is read from the TV box's docker/.env
+# (same variable). Set it here too (or export it) — server + remote ML
+# versions MUST match or Immich refuses the ML connection.
 services:
   immich-machine-learning:
     profiles: ["photos"]
-    image: ghcr.io/immich-app/immich-machine-learning:release-cuda
+    # ${IMMICH_VERSION}-cuda tracks the TV box variable: v2.4.1 -> v2.4.1-cuda,
+    # release -> release-cuda. Both aliases are published upstream.
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}-cuda
     ports:
       - "3003:3003"
     volumes:
@@ -47,7 +52,9 @@ services:
   # same one-workload-at-a-time GPU rule as everything else on this box.
   whisper:
     profiles: ["audio"]
-    image: ahmetoner/whisper-asr-webservice:latest
+    # NOTE: the image is onerahmet/... (not ahmetoner/... — that repo 404s).
+    # -gpu variant matches the nvidia reservation below.
+    image: onerahmet/openai-whisper-asr-webservice:v1.10.0-gpu
     ports:
       - "9000:9000"
     environment:

@@ -1,6 +1,8 @@
 # Opt-in: enable by uncommenting in docker/compose.yml
 services:
   jellyfin:
+    # :latest is deliberate here (Jellyfin versions fast); update manually per
+    # docs/08. Transcodes land on SSD (CACHE_ROOT), library is pool read-only.
     image: jellyfin/jellyfin:latest
     restart: unless-stopped
     ports:
@@ -11,9 +13,13 @@ services:
       - ${STORAGE_ROOT:-/mnt/pool}/media:/media:ro
       - ./data/jellyfin-config:/config
       - ${CACHE_ROOT:-/mnt/cache}/jellyfin-transcode:/transcodes
+    labels:
+      - com.centurylinklabs.watchtower.enable=false
 
   gluetun:
-    image: qmcgaw/gluetun:latest
+    # Pinned (VPN client: update deliberately, test qbit after). See
+    # https://github.com/qdm12/gluetun-wiki for provider options.
+    image: qmcgaw/gluetun:v3.41
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
@@ -26,14 +32,25 @@ services:
     environment:
       VPN_SERVICE_PROVIDER: ${VPN_PROVIDER:-protonvpn}
       VPN_TYPE: wireguard
-      WIREGUARD_PRIVATE_KEY: ${WG_PRIVATE_KEY:?set for torrent stack}
-      FIREWALL_VPN_INPUT_ALLOW: 192.168.0.0/24,100.64.0.0/10
+      WIREGUARD_PRIVATE_KEY: ${WG_PRIVATE_KEY:?set WG_PRIVATE_KEY in docker/.env for the torrent stack}
+      # Subnets reachable from BEHIND the VPN (LAN dashboard access + Tailscale
+      # remote). ADJUST 192.168.x.0/24 to your real LAN in docker/.env
+      # (GLUETUN_SUBNETS). The old FIREWALL_VPN_INPUT_ALLOW name was wrong and
+      # is intentionally not used.
+      FIREWALL_OUTBOUND_SUBNETS: ${GLUETUN_SUBNETS:-192.168.0.0/24,100.64.0.0/10}
+      # Block trackers/ads/malware for everything routed through the tunnel.
+      DOT: "on"
+      BLOCK_MALICIOUS: "on"
+      BLOCK_SURVEILLANCE: "on"
+      BLOCK_ADS: "on"
     labels:
       - com.centurylinklabs.watchtower.enable=false
 
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
     restart: unless-stopped
+    # All traffic (including WebUI) runs inside gluetun's netns = kill-switch.
+    # Verify the exit IP differs from home: docs/08-ops-runbook.md.
     network_mode: service:gluetun
     environment:
       PUID: ${PUID:-1000}
@@ -44,7 +61,8 @@ services:
       - ./data/qbit:/config
       - ${STORAGE_ROOT:-/mnt/pool}/media/downloads:/downloads
     depends_on:
-      - gluetun
+      gluetun:
+        condition: service_healthy
     labels:
       - com.centurylinklabs.watchtower.enable=false
 
@@ -63,6 +81,8 @@ services:
     volumes:
       - ${STORAGE_ROOT:-/mnt/pool}/Music:/music:ro
       - ./data/navidrome:/data
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
 
   # Audiobooks + podcasts: Audiobookshelf (~100MB RAM). Own phone app.
   # Point a library at pool Other/audiobooks (or Music/audiobooks).
@@ -76,3 +96,5 @@ services:
       - ${STORAGE_ROOT:-/mnt/pool}/Other/podcasts:/podcasts
       - ./data/audiobookshelf-config:/config
       - ./data/audiobookshelf-metadata:/metadata
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
