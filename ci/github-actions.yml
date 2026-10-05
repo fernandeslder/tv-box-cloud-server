@@ -1,0 +1,21 @@
+# GitHub Actions workflow for this repo. To enable (needs a token/login with the `workflow` scope):
+#   mkdir -p .github/workflows && git mv ci/github-actions.yml .github/workflows/ci.yml
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck bats zip unzip poppler-utils tesseract-ocr
+          curl -fsSL -o caddy.tgz https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_linux_amd64.tar.gz
+          sudo tar -xzf caddy.tgz -C /usr/local/bin caddy
+          curl -fsSL -o /tmp/dc https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64
+          sudo install -m 755 /tmp/dc /usr/local/bin/docker-compose
+      - name: Unit + config tests (shellcheck, compose config, Caddy, mover, router, wizard, cloudflare mock...)
+        run: bats tests

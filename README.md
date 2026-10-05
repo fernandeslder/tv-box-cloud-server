@@ -54,7 +54,7 @@ backups/                   restic backup + restore
 clients/                   Windows / Mac / Linux "connect me" helpers
 legion/                    one-command setup for the GPU worker (Windows + CachyOS)
 autoinstall/               unattended Ubuntu install seed
-tests/                     bats suite (also runs in CI)
+tests/                     bats suite  (ci/ has a ready GitHub Actions workflow)
 docs/                      the full plan; start with 00-overview.md
 ```
 
