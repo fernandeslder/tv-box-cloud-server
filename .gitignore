@@ -1,9 +1,16 @@
 # real secrets / local state — never commit
+.env
 docker/.env
-docker/cloud/.env.immich
+docker/*/.env
+docker/*/data/
+docker/data/
+docker/net/homepage/logs/
 configs/router.conf
 configs/router.managed.conf
 configs/prices.json
-docker/*/data/
 *.log
 .restics/
+*-library/
+credentials*.txt
+autoinstall/seed/
+autoinstall/*.iso

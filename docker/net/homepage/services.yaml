@@ -1,0 +1,35 @@
+- Cloud:
+    - Photos (Immich):
+        href: https://photos.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Phone photo backup, faces, search
+        icon: immich
+    - Files (Nextcloud):
+        href: https://files.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Documents, sync, sharing
+        icon: nextcloud
+    - Setup your devices:
+        href: https://setup.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Phone apps, QR codes, network shares
+        icon: mdi-cellphone-link
+
+- Media:
+    - Jellyfin:
+        href: https://tv.{{HOMEPAGE_VAR_DOMAIN}}
+        icon: jellyfin
+    - Music (Navidrome):
+        href: https://music.{{HOMEPAGE_VAR_DOMAIN}}
+        icon: navidrome
+    - Audiobooks:
+        href: https://audio.{{HOMEPAGE_VAR_DOMAIN}}
+        icon: audiobookshelf
+
+- System:
+    - Pi-hole:
+        href: https://pihole.{{HOMEPAGE_VAR_DOMAIN}}/admin
+        icon: pi-hole
+    - Uptime:
+        href: https://status.{{HOMEPAGE_VAR_DOMAIN}}
+        icon: uptime-kuma
+    - Metrics:
+        href: https://metrics.{{HOMEPAGE_VAR_DOMAIN}}
+        icon: beszel

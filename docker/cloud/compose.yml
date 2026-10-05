@@ -1,99 +1,134 @@
+# Cloud stack. Rule of thumb for where bytes live:
+#   SSD  (CACHE_ROOT)    databases, thumbnails, transcodes   -> fast, small, regenerable/dumped nightly
+#   POOL (STORAGE_ROOT)  originals, files                    -> lands on SSD first, mover drains to the USB HDDs
 services:
   immich-server:
-    # Pinned to the same version as the laptop's remote ML (see ../ml-laptop).
-    # IMMICH_VERSION is a version number (e.g. v2.4.1), NOT :release — both
-    # ends stay in lockstep and updates are deliberate (docs/08).
-    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:?set IMMICH_VERSION in docker/.env (e.g. v2.4.1)}
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:?IMMICH_VERSION missing (docker/.env)}
     restart: unless-stopped
-    ports:
-      - "2283:2283"
+    environment:
+      TZ: ${TZ:-Europe/London}
+      DB_HOSTNAME: immich-db
+      DB_USERNAME: immich
+      DB_DATABASE_NAME: immich
+      DB_PASSWORD: ${IMMICH_DB_PASSWORD:?IMMICH_DB_PASSWORD missing (run ./setup.sh)}
+      REDIS_HOSTNAME: redis
+      IMMICH_MACHINE_LEARNING_URL: ${IMMICH_ML_URL:-http://immich-machine-learning:3003}
     volumes:
       - ${STORAGE_ROOT:-/mnt/pool}/immich:/data
-      - ${CACHE_ROOT:-/mnt/cache}/immich-thumbs:/usr/src/app/upload/thumbs
-      - ./immich-library:/usr/src/app/upload/library
-    env_file:
-      - .env.immich
+      # Thumbnails + transcodes on the SSD: this is what makes browsing feel instant.
+      - ${CACHE_ROOT:-/mnt/cache}/immich-thumbs:/data/thumbs
+      - ${CACHE_ROOT:-/mnt/cache}/immich-encoded:/data/encoded-video
+      # Sorted Photos/ as a READ-ONLY external library (add /external/photos in Immich > Administration > External Libraries).
+      - ${STORAGE_ROOT:-/mnt/pool}/Photos:/external/photos:ro
+      - /etc/localtime:/etc/localtime:ro
     depends_on:
-      postgres:
+      immich-db:
         condition: service_healthy
       redis:
         condition: service_healthy
 
   immich-machine-learning:
-    # CPU fallback on tvbox. Prefer remote CUDA on laptop (see ../ml-laptop).
-    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:?set IMMICH_VERSION in docker/.env (e.g. v2.4.1)}
+    # CPU fallback on this box. When the Legion is online, point IMMICH_ML_URL at it (docs/10).
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:?IMMICH_VERSION missing (docker/.env)}
     restart: unless-stopped
+    mem_limit: 3g
     volumes:
       - immich-model-cache:/cache
 
-  postgres:
-    image: pgvector/pgvector:pg16
+  immich-db:
+    # Immich's own Postgres build (VectorChord). Do not swap for stock postgres/pgvector.
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
     restart: unless-stopped
-    # Localhost-only: nothing outside this host needs raw DB access.
-    ports:
-      - "127.0.0.1:5432:5432"
-    volumes:
-      - ${CACHE_ROOT:-/mnt/cache}/immich-pg:/var/lib/postgresql
-      - ./init-user-db.sh:/docker-entrypoint-initdb.d/init-user-db.sh:ro
-    env_file:
-      - .env.immich
+    shm_size: 128mb
     environment:
-      # The base postgres image reads these to create the DB at first boot.
-      POSTGRES_PASSWORD: ${IMMICH_DB_PASSWORD:?set IMMICH_DB_PASSWORD in docker/.env}
-      POSTGRES_DB: ${IMMICH_DB_NAME:-immich}
-      POSTGRES_USER: ${IMMICH_DB_USER:-immich}
+      POSTGRES_USER: immich
+      POSTGRES_DB: immich
+      POSTGRES_PASSWORD: ${IMMICH_DB_PASSWORD:?IMMICH_DB_PASSWORD missing (run ./setup.sh)}
+      POSTGRES_INITDB_ARGS: --data-checksums
+    volumes:
+      - ${CACHE_ROOT:-/mnt/cache}/immich-pg:/var/lib/postgresql/data
     healthcheck:
-      # pg_isready -U needs POSTGRES_USER (default "postgres" would fail auth
-      # health reporting once we run as the immich user).
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-immich}"]
+      test: ["CMD-SHELL", "pg_isready -U immich -d immich"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   redis:
-    image: redis:7-alpine
+    image: valkey/valkey:9
     restart: unless-stopped
-    volumes:
-      - ${CACHE_ROOT:-/mnt/cache}/immich-redis:/data
+    command: valkey-server --save "" --appendonly no
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   nextcloud:
-    image: nextcloud:stable-apache
+    # Pin the MAJOR. Nextcloud cannot skip majors on upgrade: bump one at a time (docs/08).
+    image: nextcloud:35-apache
     restart: unless-stopped
-    ports:
-      - "8081:80"
-    volumes:
-      - ${STORAGE_ROOT:-/mnt/pool}/files:/var/www/html/data
-      - ./data/nextcloud:/var/www/html/config
     environment:
       MYSQL_HOST: nextcloud-db
       MYSQL_DATABASE: nextcloud
       MYSQL_USER: nextcloud
-      MYSQL_PASSWORD: ${NEXTCLOUD_DB_PASSWORD:?set NEXTCLOUD_DB_PASSWORD in docker/.env}
+      MYSQL_PASSWORD: ${NEXTCLOUD_DB_PASSWORD:?NEXTCLOUD_DB_PASSWORD missing (run ./setup.sh)}
+      NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER:-admin}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD:?NEXTCLOUD_ADMIN_PASSWORD missing (run ./setup.sh)}
+      NEXTCLOUD_TRUSTED_DOMAINS: files.${DOMAIN:?DOMAIN missing}
+      # Behind Caddy: trust the Docker network, speak https, know our public name.
+      TRUSTED_PROXIES: 172.16.0.0/12
+      OVERWRITEPROTOCOL: https
+      OVERWRITEHOST: files.${DOMAIN}
+      OVERWRITECLIURL: https://files.${DOMAIN}
+      REDIS_HOST: redis
+      PHP_MEMORY_LIMIT: 1G
+      PHP_UPLOAD_LIMIT: 16G
+      APACHE_BODY_LIMIT: "0"
+    volumes:
+      - ${STORAGE_ROOT:-/mnt/pool}/nextcloud-data:/var/www/html/data
+      - ./data/nextcloud:/var/www/html
+      # Sorted trees are exposed inside Nextcloud via External Storage (scripts/post-install.sh).
+      - ${STORAGE_ROOT:-/mnt/pool}/Photos:/external/Photos
+      - ${STORAGE_ROOT:-/mnt/pool}/Documents:/external/Documents
+      - ${STORAGE_ROOT:-/mnt/pool}/Music:/external/Music
+      - ${STORAGE_ROOT:-/mnt/pool}/Videos:/external/Videos
+      - ${STORAGE_ROOT:-/mnt/pool}/Recordings:/external/Recordings
+      - ${STORAGE_ROOT:-/mnt/pool}/Other:/external/Other
+      - ${STORAGE_ROOT:-/mnt/pool}/private:/external/private
+      - ${STORAGE_ROOT:-/mnt/pool}/inbox:/external/Uploads
     depends_on:
       nextcloud-db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Nextcloud needs a 5-minute background job; the official image ships a cron entrypoint.
+  nextcloud-cron:
+    image: nextcloud:35-apache
+    restart: unless-stopped
+    entrypoint: /cron.sh
+    volumes:
+      - ${STORAGE_ROOT:-/mnt/pool}/nextcloud-data:/var/www/html/data
+      - ./data/nextcloud:/var/www/html
+    depends_on:
+      - nextcloud
 
   nextcloud-db:
-    image: mariadb:11
+    image: mariadb:11.8
     restart: unless-stopped
     command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
     volumes:
       - ${CACHE_ROOT:-/mnt/cache}/nextcloud-db:/var/lib/mysql
     environment:
-      MARIADB_ROOT_PASSWORD: ${NEXTCLOUD_DB_PASSWORD:?set NEXTCLOUD_DB_PASSWORD in docker/.env}
+      MARIADB_ROOT_PASSWORD: ${NEXTCLOUD_DB_ROOT_PASSWORD:?NEXTCLOUD_DB_ROOT_PASSWORD missing (run ./setup.sh)}
       MARIADB_DATABASE: nextcloud
       MARIADB_USER: nextcloud
-      MARIADB_PASSWORD: ${NEXTCLOUD_DB_PASSWORD:?set NEXTCLOUD_DB_PASSWORD in docker/.env}
+      MARIADB_PASSWORD: ${NEXTCLOUD_DB_PASSWORD:?NEXTCLOUD_DB_PASSWORD missing (run ./setup.sh)}
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
 
 volumes:
   immich-model-cache:

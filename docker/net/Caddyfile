@@ -1,60 +1,119 @@
-# Caddy is the only owner of :80/:443. Pi-hole web is on :8080.
-# CADDY_DOMAIN comes from docker/.env (e.g. home.lan), injected via compose environment.
-# NOTE: cross-stack names (immich-server, nextcloud...) resolve because the top-level
-# docker/compose.yml includes net+cloud into one project/network. Media-stack hosts
-# only answer once you enable docker/media/compose.yml.
-#
-# TLS: .home.lan is not publicly resolvable, so Caddy gets `tls internal`
-# (local CA). Trust it once per device: phones need the root cert installed
-# (see docs/11-phone-setup.md) or use http://<box-LAN-IP>:<port> for LAN-only apps.
-# If you own a real domain, switch to DNS-01 (Cloudflare) and drop `tls internal`.
+# Caddy: the only thing listening on :80/:443. One wildcard site, routed by hostname.
+# TLS comes from data/caddy-tls.caddy, which scripts/render-config.sh writes:
+#   - Cloudflare DNS-01 (trusted wildcard cert, nothing to install on devices), or
+#   - `tls internal` (local CA; devices must trust it once: setup.<domain>/root.crt)
+# DOMAIN and CF_API_TOKEN arrive as container environment variables.
 {
 	admin off
 }
 
-{$CADDY_DOMAIN} {
-	tls internal
-	handle_path /pihole* {
-		reverse_proxy pihole:8080
+{$DOMAIN}, *.{$DOMAIN} {
+	import /etc/caddy/tls.caddy
+	encode zstd gzip
+
+	# Requests that arrived through the Cloudflare Tunnel carry this header; LAN requests
+	# never do. (A LAN client faking it can only make itself MORE restricted.)
+	@tunnel header Cf-Connecting-Ip *
+
+	# --- onboarding page + local CA download ---
+	@setup host setup.{$DOMAIN} {$DOMAIN}
+	handle @setup {
+		handle /root.crt {
+			root * /data/caddy/pki/authorities/local
+			rewrite * /root.crt
+			header Content-Type application/x-x509-ca-cert
+			file_server
+		}
+		root * /srv/setup
+		file_server
 	}
+
+	# --- Immich: public only for shared-album viewing; no login/admin/upload via the tunnel ---
+	@photos host photos.{$DOMAIN}
+	handle @photos {
+		@photos_tunnel_blocked {
+			header Cf-Connecting-Ip *
+			path /api/auth/* /api/admin/* /api/users* /api/api-keys* /api/oauth/* /auth/* /admin* /user-settings* /api/sessions* /api/server/config
+		}
+		respond @photos_tunnel_blocked "Not available publicly" 403
+		@photos_upload {
+			header Cf-Connecting-Ip *
+			method POST PUT
+			path /api/assets /api/assets/bulk-upload-check
+		}
+		respond @photos_upload "Upload over Tailscale/LAN" 403
+		request_body {
+			max_size 50GB
+		}
+		reverse_proxy immich-server:2283
+	}
+
+	# --- Nextcloud: public only for share links ---
+	@files host files.{$DOMAIN}
+	handle @files {
+		redir /.well-known/carddav /remote.php/dav 301
+		redir /.well-known/caldav /remote.php/dav 301
+		@files_tunnel_blocked {
+			header Cf-Connecting-Ip *
+			not path /s/* /index.php/s/* /public.php* /index.php/apps/files_sharing/* /apps/files_sharing/* /core/* /index.php/core/* /dist/* /css/* /js/* /apps/*/css/* /apps/*/js/* /apps/*/img/* /apps/*/l10n/* /ocs/v2.php/apps/files_sharing/* /ocs/v1.php/apps/files_sharing/* /remote.php/dav/public-files/* /favicon.ico /robots.txt /index.php/csrftoken /index.php/apps/theming/*
+		}
+		respond @files_tunnel_blocked "Not available publicly" 403
+		header Strict-Transport-Security "max-age=15552000"
+		reverse_proxy nextcloud:80
+	}
+
+	@pihole host pihole.{$DOMAIN}
+	handle @pihole {
+		route {
+			respond @tunnel 403
+			redir / /admin 302
+			reverse_proxy pihole:8080
+		}
+	}
+
+	@home host home.{$DOMAIN}
+	handle @home {
+		respond @tunnel 403
+		reverse_proxy homepage:3000
+	}
+
+	@status host status.{$DOMAIN}
+	handle @status {
+		respond @tunnel 403
+		reverse_proxy uptime-kuma:3001
+	}
+
+	@metrics host metrics.{$DOMAIN}
+	handle @metrics {
+		respond @tunnel 403
+		reverse_proxy beszel:8090
+	}
+
+	@tv host tv.{$DOMAIN}
+	handle @tv {
+		respond @tunnel 403
+		reverse_proxy jellyfin:8096
+	}
+
+	@music host music.{$DOMAIN}
+	handle @music {
+		respond @tunnel 403
+		reverse_proxy navidrome:4533
+	}
+
+	@audio host audio.{$DOMAIN}
+	handle @audio {
+		respond @tunnel 403
+		reverse_proxy audiobookshelf:80
+	}
+
+	@torrent host torrent.{$DOMAIN}
+	handle @torrent {
+		respond @tunnel 403
+		reverse_proxy gluetun:8080
+	}
+
 	handle {
-		respond "tvbox up. see :3000 homepage, :3001 kuma." 200
+		respond "Unknown service" 404
 	}
-}
-
-photos.{$CADDY_DOMAIN} {
-	tls internal
-	reverse_proxy immich-server:2283
-}
-
-files.{$CADDY_DOMAIN} {
-	tls internal
-	# Nextcloud behind a proxy needs trusted_proxies + overwriteprotocol=https
-	# in config.php — one-liner in docs/04-storage-smart-cloud.md.
-	reverse_proxy nextcloud:8081
-}
-
-home.{$CADDY_DOMAIN} {
-	tls internal
-	reverse_proxy homepage:3000
-}
-
-status.{$CADDY_DOMAIN} {
-	tls internal
-	reverse_proxy uptime-kuma:3001
-}
-
-metrics.{$CADDY_DOMAIN} {
-	tls internal
-	reverse_proxy beszel:8090
-}
-
-tv.{$CADDY_DOMAIN} {
-	tls internal
-	reverse_proxy jellyfin:8096
-}
-
-music.{$CADDY_DOMAIN} {
-	tls internal
-	reverse_proxy navidrome:4533
 }

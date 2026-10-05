@@ -1,5 +1,8 @@
+# One project, one network: Caddy reaches every service by name.
+# Optional parts are compose PROFILES, selected by COMPOSE_PROFILES in docker/.env:
+#   public (Cloudflare Tunnel) | media | torrent | agent (Beszel)
+# ml-laptop/compose.yml is NOT included: it runs on the Legion (docs/10).
 include:
   - net/compose.yml
   - cloud/compose.yml
-  # - media/compose.yml   # opt-in: jellyfin + torrent
-  # - ml-laptop/compose.yml  # runs on the LAPTOP, not tvbox — see docs/06
+  - media/compose.yml

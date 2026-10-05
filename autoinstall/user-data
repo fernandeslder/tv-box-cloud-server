@@ -1,0 +1,145 @@
+#cloud-config
+# TV box — Ubuntu Server 24.04 autoinstall (Subiquity) seed. TEMPLATE.
+# Fill it with ./make-seed.sh (recommended) or by hand: replace every
+# value written as at-at-NAME-at-at below (USERNAME, PASSWORD_HASH, SSH_KEY,
+# KEYBOARD). See autoinstall/README.md.
+autoinstall:
+  version: 1
+
+  # Do not self-update the installer at boot (faster, fewer surprises).
+  refresh-installer:
+    update: no
+
+  # The installer STOPS at the storage screen so a human confirms the disk.
+  # Everything else runs unattended.
+  interactive-sections:
+    - storage
+
+  locale: en_US.UTF-8
+  keyboard:
+    layout: '@@KEYBOARD@@'
+
+  identity:
+    hostname: tvbox
+    username: '@@USERNAME@@'
+    # Generate with:  mkpasswd -m sha-512   (package whois)  or  openssl passwd -6
+    password: '@@PASSWORD_HASH@@'
+
+  ssh:
+    install-server: true
+    allow-pw: false              # key-only login; the console login still uses the password
+    authorized-keys:
+      - '@@SSH_KEY@@'
+
+  # Ethernet by DHCP. Optional Wi-Fi: delete the leading "#W# " (4 chars) from
+  # the block below and fill SSID/password (make-seed.sh --wifi-ssid does it).
+  network:
+    version: 2
+    ethernets:
+      all-en:
+        match:
+          name: "en*"
+        dhcp4: true
+        optional: true
+#W#     wifis:
+#W#       all-wl:
+#W#         match:
+#W#           name: "wl*"
+#W#         dhcp4: true
+#W#         optional: true
+#W#         access-points:
+#W#           '@@WIFI_SSID@@':
+#W#             password: '@@WIFI_PASS@@'
+
+  # Install to the SSD/NVMe only, whole disk, no LVM. HDDs (rotational) never
+  # match "ssd: true", but keep USB drives unplugged anyway: a USB SSD would match.
+  # The storage screen shows this choice and waits for confirmation.
+  storage:
+    layout:
+      name: direct
+      match:
+        ssd: true
+
+  packages:
+    - git
+    - curl
+    - ca-certificates
+    - avahi-daemon     # makes the box reachable as tvbox.local
+    - libnss-mdns
+
+  late-commands:
+    # 1. First-boot script (runs the repo bootstrap once, then disables itself).
+    - |
+      cat > /target/usr/local/sbin/tvbox-firstboot.sh <<'SCRIPT'
+      #!/bin/bash
+      set -uo pipefail
+      LOG=/var/log/tvbox-firstboot.log
+      MARKER=/var/lib/tvbox-firstboot.done
+      SEED_ENV=/opt/tvbox-seed.env
+      BOOTSTRAP_URL=https://raw.githubusercontent.com/fernandeslder/tv-box-cloud-server/master/bootstrap.sh
+
+      exec >>"$LOG" 2>&1
+      [ -e "$MARKER" ] && exit 0
+      echo "=== $(date -Is) tvbox first-boot setup starting"
+
+      # network-online can fire before DHCP/Wi-Fi really works: probe for up to 10 min
+      for _ in $(seq 1 60); do
+        curl -fsI --max-time 10 https://raw.githubusercontent.com >/dev/null && break
+        echo "$(date -Is) waiting for internet..."
+        sleep 10
+      done
+
+      tmp=$(mktemp)
+      if ! curl -fsSL --retry 5 --retry-delay 10 "$BOOTSTRAP_URL" -o "$tmp"; then
+        echo "$(date -Is) could not download bootstrap.sh; will retry on next boot"
+        exit 1
+      fi
+
+      export TVBOX_NONINTERACTIVE=1 DEBIAN_FRONTEND=noninteractive
+      [ -f "$SEED_ENV" ] && export TVBOX_ENV_FILE="$SEED_ENV"
+
+      if bash "$tmp"; then
+        touch "$MARKER"
+        systemctl disable tvbox-firstboot.service
+        echo "=== $(date -Is) tvbox first-boot setup finished OK"
+      else
+        echo "=== $(date -Is) bootstrap FAILED; will retry on next boot (or: sudo systemctl start tvbox-firstboot)"
+        exit 1
+      fi
+      SCRIPT
+      chmod 755 /target/usr/local/sbin/tvbox-firstboot.sh
+
+    # 2. systemd oneshot unit, started once the network is up.
+    - |
+      cat > /target/etc/systemd/system/tvbox-firstboot.service <<'UNIT'
+      [Unit]
+      Description=TV box first-boot setup (runs bootstrap.sh once)
+      Wants=network-online.target
+      After=network-online.target
+      ConditionPathExists=!/var/lib/tvbox-firstboot.done
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/tvbox-firstboot.sh
+      TimeoutStartSec=infinity
+
+      [Install]
+      WantedBy=multi-user.target
+      UNIT
+    - curtin in-target --target=/target -- systemctl enable tvbox-firstboot.service
+
+    # 3. Optional pre-filled env file from the seed USB/ISO (file name: tvbox-seed.env).
+    - |
+      mkdir -p /mnt/tvbox-seed
+      for dev in /dev/disk/by-label/CIDATA /dev/disk/by-label/cidata; do
+        [ -e "$dev" ] && mount -o ro "$dev" /mnt/tvbox-seed 2>/dev/null && break
+      done
+      for f in /mnt/tvbox-seed/tvbox-seed.env /cdrom/tvbox-seed.env; do
+        if [ -f "$f" ]; then
+          install -D -m 600 "$f" /target/opt/tvbox-seed.env
+          break
+        fi
+      done
+      umount /mnt/tvbox-seed 2>/dev/null || true
+
+  shutdown: reboot

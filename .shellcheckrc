@@ -1,0 +1,3 @@
+external-sources=true
+# A && B || C is used deliberately for best-effort steps; lib.sh is sourced via a computed path.
+disable=SC2015,SC1091

@@ -1,21 +1,34 @@
 # RUNS ON THE LEGION 7 (RTX 4080 12GB), NOT on tvbox. Connected via Tailscale.
+# Normally started for you by legion/setup-linux.sh / legion/setup-windows.ps1.
+# Manual run (from this directory):
+#   IMMICH_VERSION=v3.2.4 docker compose --profile photos --profile audio up -d
+#   (or put IMMICH_VERSION=v3.2.4 in a .env next to this file)
+# Profiles: photos = Immich ML :3003 | audio = whisper :9000 |
+#           ollama = containerised Ollama :11434 (NOT needed: Ollama runs natively).
 # Setup walkthrough: docs/10-legion-ai-server.md
 # GPU rule: one workload family at a time. Ollama side self-swaps
 # (OLLAMA_MAX_LOADED_MODELS=1 + KEEP_ALIVE); stop the photos profile
 # before huge doc-caption runs and restart after.
-# Version lockstep: IMMICH_VERSION is read from the TV box's docker/.env
-# (same variable). Set it here too (or export it) — server + remote ML
-# versions MUST match or Immich refuses the ML connection.
+# Version lockstep: IMMICH_VERSION MUST equal the TV box's docker/.env value
+# (server + remote ML versions must match or Immich refuses the ML connection).
+# No default on purpose: compose fails loudly if it is unset.
 services:
   immich-machine-learning:
     profiles: ["photos"]
-    # ${IMMICH_VERSION}-cuda tracks the TV box variable: v2.4.1 -> v2.4.1-cuda,
+    # ${IMMICH_VERSION}-cuda tracks the TV box variable: v3.2.4 -> v3.2.4-cuda,
     # release -> release-cuda. Both aliases are published upstream.
-    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}-cuda
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:?set IMMICH_VERSION}-cuda
+    restart: unless-stopped
     ports:
-      - "3003:3003"
+      - "0.0.0.0:3003:3003"   # exposure limited to tailnet+LAN by the host firewall
     volumes:
       - model-cache:/cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     deploy:
       resources:
         reservations:
@@ -29,8 +42,9 @@ services:
   ollama:
     profiles: ["ollama"]
     image: ollama/ollama:cuda
+    restart: unless-stopped
     ports:
-      - "11434:11434"
+      - "0.0.0.0:11434:11434"
     environment:
       OLLAMA_KEEP_ALIVE: 5m
       OLLAMA_MAX_LOADED_MODELS: 1
@@ -55,13 +69,21 @@ services:
     # NOTE: the image is onerahmet/... (not ahmetoner/... — that repo 404s).
     # -gpu variant matches the nvidia reservation below.
     image: onerahmet/openai-whisper-asr-webservice:v1.10.0-gpu
+    restart: unless-stopped
     ports:
-      - "9000:9000"
+      - "0.0.0.0:9000:9000"
     environment:
       ASR_MODEL: small
       ASR_ENGINE: faster_whisper
     volumes:
       - whisper-cache:/root/.cache
+    # python is guaranteed in this image; curl is not. /docs is the FastAPI UI.
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/docs', timeout=4)"]
+      interval: 30s
+      timeout: 6s
+      retries: 5
+      start_period: 120s
     deploy:
       resources:
         reservations:

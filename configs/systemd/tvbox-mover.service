@@ -1,0 +1,10 @@
+[Unit]
+Description=Drain the SSD landing cache to the HDDs
+ConditionPathIsMountPoint=@POOL@
+After=tvbox-storage.service
+
+[Service]
+Type=oneshot
+ExecStart=@REPO@/scripts/mover.sh
+Nice=10
+IOSchedulingClass=idle

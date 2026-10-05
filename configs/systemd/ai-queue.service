@@ -1,10 +1,13 @@
 [Unit]
-Description=Drain AI queue every 5 minutes (singleton — overlapping runs exit quietly)
+Description=Drain AI queue (singleton - overlapping runs exit quietly)
 After=network-online.target docker.service
 Wants=network-online.target
+ConditionPathIsMountPoint=@POOL@
 
 [Service]
 Type=oneshot
-User=htpc
+User=@USER@
+Group=www-data
+UMask=0002
 Environment="LEGION_HOSTS=legion-linux legion-win"
-ExecStart=/usr/bin/flock -n /tmp/ai-queue.lock /home/htpc/tv-box-cloud-server/scripts/ai-queue.sh
+ExecStart=/usr/bin/flock -n /run/lock/tvbox-ai-queue.lock @REPO@/scripts/ai-queue.sh

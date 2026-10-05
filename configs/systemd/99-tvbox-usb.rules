@@ -1,0 +1,4 @@
+# Keep USB mass-storage disks awake (autosuspend is the usual cause of "loose cable" drops)
+# and re-run the storage sync the moment a registered filesystem appears or disappears.
+ACTION=="add|change", SUBSYSTEM=="usb", ATTR{bInterfaceClass}=="08", TEST=="power/control", ATTR{power/control}="on"
+ACTION=="add|remove", SUBSYSTEM=="block", ENV{ID_FS_TYPE}=="ext4", ENV{ID_BUS}=="usb", RUN+="/usr/bin/systemctl --no-block start tvbox-storage.service"

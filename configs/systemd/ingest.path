@@ -2,7 +2,7 @@
 Description=Run ingest when files land in the inbox
 
 [Path]
-PathChanged=/mnt/pool/inbox
+PathChanged=@POOL@/inbox
 
 [Install]
 WantedBy=multi-user.target

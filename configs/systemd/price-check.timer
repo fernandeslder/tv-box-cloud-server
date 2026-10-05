@@ -1,8 +1,9 @@
 [Unit]
-Description=Refresh cheapest-model picks daily
+Description=Refresh model picks daily
 
 [Timer]
-OnCalendar=daily
+OnCalendar=*-*-* 06:00:00
+RandomizedDelaySec=30min
 Persistent=true
 
 [Install]

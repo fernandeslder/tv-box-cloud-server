@@ -1,0 +1,7 @@
+[Unit]
+Description=Re-point DNS/HTTPS config if the box's LAN IP changed (Wi-Fi -> Ethernet, DHCP)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=@REPO@/scripts/tvbox update-ip --auto

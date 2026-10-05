@@ -1,0 +1,10 @@
+[Unit]
+Description=TV box storage: mount USB disks present, keep the SSD+HDD pool up
+After=local-fs.target systemd-udev-settle.service
+Before=docker.service smbd.service
+
+[Service]
+Type=oneshot
+ExecStart=@REPO@/scripts/disks.sh sync
+# A missing USB disk must never fail boot or the timer.
+SuccessExitStatus=0 1

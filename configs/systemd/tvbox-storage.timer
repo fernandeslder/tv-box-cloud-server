@@ -1,0 +1,10 @@
+[Unit]
+Description=Re-check USB disks every minute (heals loose cables)
+
+[Timer]
+OnBootSec=5s
+OnUnitActiveSec=1min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

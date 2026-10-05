@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# tvbox — day-to-day control. `tvbox help` lists everything.
+set -euo pipefail
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+S="$(cd "$(dirname "$SELF")" && pwd)"
+if [ ! -f "$S/lib.sh" ]; then S="$(dirname "$(readlink -f /usr/local/bin/tvbox)")"; fi
+. "$S/lib.sh"
+DC=(docker compose --project-directory "$REPO_DIR/docker" -f "$REPO_DIR/docker/compose.yml" --env-file "$ENV_FILE")
+sudo_() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi; }
+
+cmd_status() {
+  echo "== storage =="; "$S/disks.sh" status
+  echo; echo "== containers =="
+  "${DC[@]}" ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}' 2>/dev/null || echo "docker not running"
+  echo; echo "== open =="; cmd_urls
+}
+cmd_urls() {
+  local d; d="$(env_get DOMAIN)"
+  printf '  %-22s https://%s\n' "Set up devices" "setup.$d" "Photos" "photos.$d" "Files" "files.$d" "Dashboard" "home.$d" "Pi-hole" "pihole.$d/admin" "Uptime" "status.$d"
+}
+chk() {  # chk "label" command... ; prints ✓/✗, returns status
+  local label="$1"; shift
+  if "$@" >/dev/null 2>&1; then ok "$label"; return 0; else warn "FAIL: $label"; return 1; fi
+}
+cmd_doctor() {
+  local bad=0 d lan; d="$(env_get DOMAIN)"; lan="$(env_get LAN_IP)"
+  chk "docker daemon running" docker info || bad=1
+  chk "pool mounted ($STORAGE_ROOT)" mountpoint -q "$STORAGE_ROOT" || bad=1
+  "$S/disks.sh" status | grep -q OFFLINE && { warn "a USB disk is OFFLINE (uploads keep landing on the SSD): check the cable"; bad=1; }
+  chk "SSD below 85% full" bash -c "[ \$(df --output=pcent '$LANDING_DIR' | tail -n1 | tr -dc 0-9) -lt 85 ]" || bad=1
+  cur="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -n1)"
+  chk "LAN IP unchanged ($lan)" test "$cur" = "$lan" || { warn "IP is now $cur: run: sudo tvbox update-ip"; bad=1; }
+  chk "DNS answers locally (Pi-hole)" bash -c "getent ahosts photos.$d >/dev/null && dig +short +time=3 @127.0.0.1 photos.$d | grep -q ." || bad=1
+  chk "HTTPS photos.$d" curl -sk -m 8 -o /dev/null --resolve "photos.$d:443:127.0.0.1" "https://photos.$d/" || bad=1
+  chk "HTTPS files.$d" curl -sk -m 8 -o /dev/null --resolve "files.$d:443:127.0.0.1" "https://files.$d/" || bad=1
+  chk "SMB (445) listening" bash -c "ss -ltn | grep -q ':445 '" || bad=1
+  for s in $("${DC[@]}" config --services 2>/dev/null); do
+    st="$("${DC[@]}" ps --format '{{.State}}' "$s" 2>/dev/null | head -n1)"
+    [ -z "$st" ] || [ "$st" = running ] || { warn "container $s is $st"; bad=1; }
+  done
+  chk "Tailscale connected" tailscale status || true
+  chk "last backup < 3 days old" bash -c "find /var/lib/tvbox/last-backup -mtime -3 2>/dev/null | grep -q ." || { warn "no recent backup (is the backup disk attached?)"; bad=1; }
+  [ "$bad" -eq 0 ] && echo "All good." || { echo "Problems found (above)."; return 1; }
+}
+cmd_update_ip() {
+  local auto=0; [ "${1:-}" = "--auto" ] && auto=1
+  local old new net dev
+  old="$(env_get LAN_IP)"
+  new="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -n1)"
+  [ -n "$new" ] || { [ "$auto" = 1 ] && exit 0; die "no network"; }
+  [ "$new" != "$old" ] || { [ "$auto" = 1 ] || echo "LAN IP unchanged: $old"; return 0; }
+  [ "$(id -u)" -eq 0 ] || { exec sudo "$SELF" update-ip "$@"; }
+  dev="$(ip -4 route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}' | head -n1)"
+  net="$(python3 -c 'import ipaddress,sys; print(ipaddress.ip_interface(sys.argv[1]).network)' "$(ip -4 -o addr show dev "$dev" | awk '{print $4}' | head -n1)")"
+  env_set LAN_IP "$new"; env_set LAN_CIDR "$net"
+  log "LAN IP changed $old -> $new: refreshing DNS + Tailscale route"
+  "${DC[@]}" up -d pihole >/dev/null 2>&1 || true
+  tailscale set --advertise-routes="$net" >/dev/null 2>&1 || true
+  "$S/render-config.sh" >/dev/null 2>&1 || true
+  "$S/notify.sh" warn "LAN IP changed to $new. Set the router's DNS to $new and reserve this IP." || true
+}
+cmd_backup() { sudo_ "$REPO_DIR/backups/backup.sh" "$@"; }
+cmd_logs() { "${DC[@]}" logs -f --tail=100 "$@"; }
+cmd_update() {
+  git -C "$REPO_DIR" pull --ff-only
+  "${DC[@]}" pull
+  "${DC[@]}" up -d --build --remove-orphans
+}
+
+case "${1:-help}" in
+  status) cmd_status ;;
+  doctor) cmd_doctor ;;
+  urls) cmd_urls ;;
+  up) "${DC[@]}" up -d --build ;;
+  down) "${DC[@]}" down ;;
+  restart) shift; "${DC[@]}" restart "$@" ;;
+  logs) shift; cmd_logs "$@" ;;
+  update) cmd_update ;;
+  backup) shift; cmd_backup "$@" ;;
+  restore) shift; sudo_ "$REPO_DIR/backups/restore.sh" "$@" ;;
+  disks) shift; sudo_ "$S/disks.sh" "${@:-status}" ;;
+  mover) sudo_ "$S/mover.sh" ;;
+  update-ip) shift; cmd_update_ip "$@" ;;
+  post-install) sudo_ "$S/post-install.sh" ;;
+  creds) cat "$TVBOX_HOME/tvbox-credentials.txt" ;;
+  setup) shift; sudo_ "$REPO_DIR/setup.sh" "$@" ;;
+  help|-h|--help|*) cat <<'H'
+tvbox <command>
+  status        storage, containers, URLs
+  doctor        health check with plain-English fixes
+  urls          the addresses to open
+  up | down | restart [svc] | logs [svc]
+  update        git pull + pull images + restart
+  backup        run the backup now
+  restore       restore from the backup disk (see docs/08)
+  disks [scan|add|sync|status]   USB disk management
+  mover         flush the SSD cache to the HDDs now
+  update-ip     re-point DNS/Tailscale after the LAN IP changed
+  creds         show where your generated passwords are
+  setup         re-run the installer / wizard (--reconfigure)
+H
+  ;;
+esac

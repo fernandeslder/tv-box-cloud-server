@@ -1,8 +1,9 @@
 [Unit]
-Description=Weekly restic backup
+Description=Nightly backup
 
 [Timer]
-OnCalendar=weekly
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=15min
 Persistent=true
 
 [Install]

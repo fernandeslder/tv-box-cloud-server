@@ -1,0 +1,14 @@
+title: TV Box
+theme: dark
+color: slate
+headerStyle: boxed
+layout:
+  Cloud:
+    style: row
+    columns: 3
+  Media:
+    style: row
+    columns: 4
+  System:
+    style: row
+    columns: 4

@@ -1,9 +1,9 @@
 [Unit]
-Description=Hourly ingest safety net (catches anything the path trigger missed)
+Description=Ingest safety net (catches anything the path trigger missed)
 
 [Timer]
-OnCalendar=hourly
-Persistent=true
+OnBootSec=2min
+OnUnitActiveSec=5min
 
 [Install]
 WantedBy=timers.target
