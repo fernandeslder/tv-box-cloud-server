@@ -53,7 +53,7 @@ register_disks
 # Folder skeleton. Shared group www-data (gid 33) = Nextcloud's group inside its container,
 # so Samba, ingest, Immich-import and Nextcloud all read/write the same files.
 if mountpoint -q "$STORAGE_ROOT"; then
-  for d in inbox Photos Documents Music Recordings Videos Other private duplicates immich nextcloud-data media backups-staging .ai-queue; do
+  for d in inbox Photos Documents Music Recordings Videos Other private duplicates immich nextcloud-data media media/audiobooks media/podcasts media/downloads backups-staging .ai-queue; do
     mkdir -p "$STORAGE_ROOT/$d"
   done
   chown "$TVBOX_USER:www-data" "$STORAGE_ROOT"/{inbox,Photos,Documents,Music,Recordings,Videos,Other,private,duplicates,media,.ai-queue}

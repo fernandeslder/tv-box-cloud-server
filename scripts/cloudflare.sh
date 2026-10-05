@@ -9,7 +9,7 @@ set -euo pipefail
 TOKEN="$(env_get CF_API_TOKEN)"; DOMAIN="$(env_get DOMAIN)"; HOSTS="$(env_get PUBLIC_HOSTS "files photos")"
 HOSTS="${HOSTS//\"/}"
 NAME="${TUNNEL_NAME:-$(env_get TVBOX_HOSTNAME tvbox)}"
-API=https://api.cloudflare.com/client/v4
+API="${CF_API_BASE:-https://api.cloudflare.com/client/v4}"
 [ -n "$TOKEN" ] && [ -n "$DOMAIN" ] && [ "$DOMAIN" != home.lan ] || { echo "cloudflare: no token/domain configured — skipping"; exit 0; }
 
 cf() {  # cf METHOD PATH [json-body] -> body on stdout; non-success => rc 1

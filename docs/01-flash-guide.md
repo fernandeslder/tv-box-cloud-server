@@ -30,14 +30,15 @@ Boot the USB (UEFI entry) → `Try or Install Ubuntu Server`, then:
 sudo apt update && sudo apt install -y git curl   # only if missing
 curl -fsSL https://raw.githubusercontent.com/fernandeslder/tv-box-cloud-server/master/bootstrap.sh | sudo bash
 ```
-This clones the repo to `/opt/tvbox` and starts `sudo ./setup.sh`, an interactive wizard (20–40 min). Re-run safely any time:
-`cd /opt/tvbox && sudo ./setup.sh`. Unattended: pre-fill `docker/.env` and use `--yes`.
-Human steps that remain: secrets (Cloudflare token, Pi-hole password), `tailscale up` approval, HDD UUIDs after you connect the disks.
-Then: `docs/08-ops-runbook.md` (router DNS cutover to Pi-hole, backup test).
+This clones the repo to `/opt/tvbox` and starts the wizard (20-40 min, mostly downloads). It asks a few questions (domain, TV desktop, extras), **generates every password**, offers to format any blank USB disks (you type `ERASE` once), and ends by printing the address to open on your phone. Re-run safely any time: `cd /opt/tvbox && sudo ./setup.sh` (`--reconfigure` to be asked again).
+
+**Unattended** (autoinstall, or `TVBOX_NONINTERACTIVE=1`): answers come from `/opt/tvbox-seed.env` (same keys as `docker/.env.example`, e.g. `DOMAIN`, `CF_API_TOKEN`, `TVBOX_DISKS=/dev/sdb:data,/dev/sdc:backup`). Without a `TVBOX_DISKS` line the installer never formats anything: it runs SSD-only and you add disks later with `sudo tvbox disks add /dev/sdX data`.
+
+Human steps that always remain: confirm the install disk, approve the Tailscale subnet route + Split DNS, reserve the box's IP in the router and point the router's DNS at it (`docs/05`, `docs/08`).
 
 ## OS choice
 **Ubuntu Server 24.04 LTS is recommended**: 5 years of support, and Docker, Plasma, Kodi and mergerfs are all packaged.
 Debian 13 and Linux Mint 22 also work with the same setup (autoinstall is Ubuntu-only; use Option B there).
 
 ## If you ever re-flash
-Data survives on the HDD pool. Recovery = install the OS, then "Run the setup" again.
+Data survives on the USB disks. Recovery = install the OS, run the setup again (disks labelled `tvbox-*` are re-adopted automatically, not reformatted), then `tvbox restore databases` (`docs/08`).
