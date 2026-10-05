@@ -17,7 +17,7 @@ else
 fi
 
 # --- router.conf (AI + external model keys live here, mode 600) ----------------
-RC="$REPO_DIR/configs/router.conf"
+RC="${ROUTER_CONF:-$REPO_DIR/configs/router.conf}"
 [ -f "$RC" ] || { install -m 600 "$REPO_DIR/configs/router.conf.example" "$RC"; }
 chmod 600 "$RC"
 key="$(env_get COMMAND_CODE_API_KEY)"

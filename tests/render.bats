@@ -1,6 +1,6 @@
 load helpers
-setup() { mk_tmp; export ENV_FILE="$T/env" TVBOX_SEED="$T/none" TVBOX_DATA_DIR="$T/data"; "$REPO/scripts/wizard.sh" --yes >/dev/null; }
-teardown() { rm -rf "$T"; git -C "$REPO" checkout -q configs/router.conf 2>/dev/null || true; }
+setup() { mk_tmp; export ENV_FILE="$T/env" TVBOX_SEED="$T/none" TVBOX_DATA_DIR="$T/data" ROUTER_CONF="$T/router.conf"; "$REPO/scripts/wizard.sh" --yes >/dev/null; }
+teardown() { rm -rf "$T"; }
 @test "internal mode writes 'tls internal'" {
   "$REPO/scripts/render-config.sh" >/dev/null; [ "$(cat "$T/data/caddy-tls.caddy")" = "tls internal" ]
 }
