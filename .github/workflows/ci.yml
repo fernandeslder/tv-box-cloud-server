@@ -1,5 +1,3 @@
-# GitHub Actions workflow for this repo. To enable (needs a token/login with the `workflow` scope):
-#   mkdir -p .github/workflows && git mv ci/github-actions.yml .github/workflows/ci.yml
 name: ci
 on:
   push:
