@@ -1,94 +1,55 @@
 # 06 — Smart sorting: always visible to you, gated only at the outside door
 
 Locked rules:
-1. **Everything you upload is always accessible to you** (Nextcloud/Immich), scanned or not, secret or not.
-2. Files with secrets live in **`private/`** — same apps, same login, just a separate folder. Not hidden, not deleted.
-3. **Nothing unprocessed or secret-bearing goes to outside APIs.** Your TV box + Legion = allowed (you own them). Third-party APIs = only for files that passed screening, only if you enable it.
-4. **Type-sort runs on-device** by file type (photo/doc/music/video/other) — instant, no AI needed.
-5. **Subcategorization** (whose face, scenery vs receipt, doc topics): Legion models first (free); cheap outside APIs allowed **only for clean-screened files**.
+1. **Everything you upload is always visible to you** (Samba / Nextcloud / Immich), scanned or not, secret or not.
+2. Files with secrets or sensitive IDs live in **`private/`** — same apps, same login, separate folder. Not hidden, not deleted.
+3. **Calls to your own Legion are never redacted** (you own it). **Anything sent to an external API is redacted first**, transcript-only, and never contains a `SECRET`-verdict file.
+4. Type-sorting is instant and on-device; AI only does subcategories, secrets-judging and extraction.
 
 ```
-inbox/ --> ingest.sh: type-sort by MIME/extension --> Photos/ Documents/ Music/ Videos/ Other/
-  Documents: extract text (pdftotext/tesseract) --> TIER 0 TruffleHog (tvbox CPU, ms)
-  Photos/Videos/Music: Tier 0 text-scan skipped at ingest (OCR-ing everything on CPU is too slow)
-           |
-  TIER 0 HIT --> private/ (still yours, still in Nextcloud) + tag `has-secrets`, never outside
-  clean / unscanned --> stays where it is + tag `pending-ai` + job in .ai-queue/
-           |
-  Legion online? ai-queue.sh drains oldest-first (Legion is YOURS, so unprocessed files may go there):
-    - doc transcript --> Jev qwen2.5:3b (System 1) judge --> HIT? private/ : clean
-    - photo --> moondream transcribes visible text --> judge transcript --> HIT? private/ : clean
-    - clean photo --> Immich faces/CLIP (Legion CUDA, or slow TV-box CPU fallback)
-           |
-  CLEAN + you opted in --> enrichment may use cheap outside APIs (never before this point)
+inbox/ -> ingest.sh (every 5 min + on change; skips files still uploading)
+  type-sort by extension/MIME -> Photos Documents Music Recordings Videos Other
+  Stage-0 filename rules (all types): passport/license/bank/medical names -> private/<IDs|Finance|Health>
+  Documents: text extraction (pdftotext, OCR for scans, docx/xlsx/pptx/odt/epub unzip) -> TruffleHog (Tier 0)
+      secret hit -> private/        stage-0 text rules hit -> private/<Cat>/     else -> .ai-queue/<name>.pending
+  Photos/Audio/Videos/Other: queued
+ai-queue.sh (every 5 min, only while a Legion answers; every job ends in done/):
+  photo  -> moondream transcribes visible text -> stage-0 -> judge
+  audio  -> whisper: speech (>=8 words) -> Recordings/ + judge ; music -> Music/<Artist>/[Album]/
+  doc    -> judge -> Jev categorize -> Documents/<Category>/ + .summary.txt
+  video / archive / unknown -> done (nothing to read; filename rules already ran)
 ```
 
-## TIER 0 — deterministic secret scan (TV box, always available)
-`./scripts/scan-secrets.sh <file>` — TruffleHog, `--no-verification` (never phones providers to "verify" a live key). Catches AWS/GCP/GitHub/Stripe-style keys, private keys, high-entropy tokens. Exit 1 = move to `private/`.
+## Tier 0 — TruffleHog (offline)
+`scan-secrets.sh <file>`: pinned image, `--no-verification`, no network. Exit 1 = findings -> `private/`.
 
-## System 1: Jev decision contract (typed, never parsed prose)
-A System 1 model (TypeSafe's Jev, Sept 2026) doesn't chat — it returns typed decisions: noul (yes/no), choice (pick one), score (0-100), with calibrated confidence. Our pipeline speaks that contract via `scripts/jev.sh`, which constrains any Ollama-hosted decision model with JSON-schema structured outputs (temperature 0) and validates the shape. Anything unparseable = exit 2 = job stays queued. No grep ever decides anything.
-- Secrets: `jev.sh noul` ("secret credentials in this text?") — scan-secrets prints the legacy VERDICT line for existing parsers, but the decision arrived as typed JSON.
-- Categories: `jev.sh choice` over live folder lists (+ NEW) — categorize.sh. Summaries are display-only free text, never control flow.
-- Music split: `jev.sh fields` (artist/title/title_only) — sort-music.sh.
-- Vision (moondream) and whisper transcripts flow through the same noul judge — one decision interface for every modality.
-- Scores: `jev.sh score` for future quality gates; confidence already feeds the paid router (`router_decide`).
-- Drop-in engines via JEV_MODEL: the default `qwen2.5:3b-instruct` is a stand-in, not a true decision-tuned model. Verified open alternatives: Kev 0.8B/4B/9B (Jared Palmer, Qwen3.5-based, Jev-compatible API), Laya (Apache 2.0, calibrated choice/score/boolean), SemIf (logit-softmax over frozen Qwen3.5 4B, no retraining), NanoJev 0.6B (tiny enough for TV-box CPU).
-- JEV_URL defaults to the Legion but can point at localhost: run NanoJev via Ollama on the TV box itself and Tier-1 screening keeps working with the Legion offline. (Opt-in; needs `ollama serve` on tvbox.)
-- Fallback chain (jev.sh, configured in `configs/router.conf`): Legion System-1 engine first, then local NanoJev (`JEV_FALLBACK_URL` + `JEV_FALLBACK_MODEL`; empty = no fallback), then defer. A malformed answer counts as "can't decide" and falls back too — but a valid low-confidence decision is an ANSWER, never a failure (confidence is the paid router's job, not a retry trigger).
-- Lane separation: System 2 (`qwen2.5:7b`) only ever invents new category names (generative lane). It is NEVER consulted for noul/choice/score decisions — those fall back NanoJev-ward or stay queued.
+## Tier 1 — Jev on the Legion (typed decisions, never prose)
+`jev.sh noul|choice|score|fields` talks to an Ollama model with JSON-schema structured output and validates the shape; anything malformed = exit 2 = stays queued. `scan-secrets.sh --llm` judges the **whole** transcript in overlapping 3000-char chunks (a secret on page 3 is not skipped); any chunk "yes" = SECRET. Engines are drop-in via `JEV_MODEL` (default `qwen2.5:3b-instruct`; Kev, Laya, SemIf, NanoJev compatible). Fallback chain: Legion engine -> local NanoJev (`JEV_FALLBACK_*`) -> defer. A valid low-confidence decision is an *answer*, not a failure.
 
-## Enrichment + escalation router (free first, paid last-resort, minimized by code)
-Priority ladder: **free local > self-hosted Legion > FREE external > paid**.
-The router (`scripts/router.sh`, policy in `configs/router.conf`,
-daily picks in `configs/router.managed.conf`) enforces it per file:
-- `SECRET` verdict -> **BLOCKED** from everything outside. Coded, not just policy.
-- `CLEAN` + confidence >= 70 -> done locally, $0.
-- `CLEAN` + confidence < 70 -> escalate **only the ~4KB text transcript**
-  (never raw files/images), in order:
-  1. **OpenCode free tier via CLI** (`opencode run --model ...`, your quota,
-     $0 -- proven working; one `opencode auth login` on the box),
-  2. **OpenRouter `:free` daily pick** ($0, free key),
-  3. **Paid, cheapest-first** (daily-ranked, capped).
-- Guards: `PAID_ENABLED=false` by default (free steps run regardless);
-  monthly cap ($2 default) in `spend.log`; over budget -> `needs-paid` wait.
-  Paid-off -> low-confidence CLEAN accepted locally and logged.
-- `scripts/price-check.sh` (daily 06:00 timer) pulls OpenRouter's public catalog
-  (~1MB), ranks for our shape (1000 in / 50 out), refreshes paid + free picks.
-  Never touches keys, switches, or budget.
-- Subcategorization beyond secrets (faces, scenery, doc topics): Legion free by default.
-  Outside APIs only ever see clean-screened transcripts, only if you opt in.
+System 2 (`qwen2.5:7b`) only ever **names new folders**; it never makes yes/no decisions.
 
-### Cheapest paid models (researched + verified Sep 2026, per-escalation ≈ 1000 in / 50 out)
-| # | Provider / model | In $/1M | Out $/1M | $/call | Free tier | Endpoint |
-|---|---|---|---|---|---|---|
-| 1 | **Groq `openai/gpt-oss-20b`** (default first) | 0.075 | 0.30 | **0.00009** | rate-limited free tier, no card | OpenAI-compatible ✓ |
-| 2 | **Gemini `gemini-2.5-flash-lite`** (fallback) | 0.10 | 0.40 | **0.00012** | generous AI Studio free tier | OpenAI-compatible ✓ |
-Also-rans: Mistral Ministral 3B ($0.10/$0.10), DeepSeek Flash ($0.15/$0.60 off-peak), Together/Fireworks small models ($0.02–0.07 in). Anthropic Haiku (~$0.00125/call) is 10x the price — never for this job. Rock-bottom OpenRouter routes ($0.01 in) exist but run through obscure resellers — rejected for reliability.
-- All providers speak OpenAI `/chat/completions`, so adding one = 3 lines in `configs/router.conf`, no code changes.
-- You opted into training-on-data terms, which unlocks the free tiers above as overflow: Groq free tier and Gemini AI Studio free tier can absorb escalations at $0 before paid billing even starts.
-- At ~$0.0001/call, the $2 default cap buys ~20,000 escalations/month. You will realistically spend $0.
+## External opinion — Command Code Provider API (optional)
+Only for **CLEAN + confidence < 70** (default). One provider, one key (`COMMAND_CODE_API_KEY` in `configs/router.conf`, mode 600). The router climbs intelligence tiers until one answer is confident enough:
 
-## Faces — Immich does this (Google-Photos-style)
-- Face detection runs inside immich-machine-learning (InsightFace, Legion CUDA or TV-box CPU fallback) automatically on every photo in the Immich library.
-- Name people once in the Immich app (People view); every photo of them becomes searchable by name, and Smart Search answers "photos of X at the beach".
-- Sorted `Photos/` get the same treatment: add `/mnt/pool/Photos` as an Immich **external library** (read-only) so faces + CLIP search cover your sorted folders too — no duplicates, no double storage. See `docs/04`.
-- Person names live in Immich's database (backed up with Postgres), not in filenames.
+| Tier | Models (defaults, best-first) | Cost |
+|---|---|---|
+| `jev` | `typesafe/jev` on `/provider/v1/systemone` — calibrated probability, typed | ~$0.0001 |
+| `free` | `poolside/laguna-s-2.1-free`, `inclusionai/ling-3.1-flash:free`, `stealth/space-bunny-alpha` | $0 |
+| `value` | `deepseek/deepseek-v4.1-flash`, `z-ai/glm-5.3-flash`, `xiaomi/mimo-v2.5`, `meta/muse-spark-1.2-contributor`, `moonshotai/Kimi-K3` | cents/1000 calls |
+| `strong` | `deepseek/deepseek-v4-pro`, `MiniMaxAI/MiniMax-M3`, `zai-org/GLM-5.3` — only if `EXTERNAL_MAX_TIER=strong` | more |
 
-## Audio — speech vs music (whisper on YOUR Legion)
-- Every audio job goes to faster-whisper (`small`, ~2GB VRAM, `:9000`, profile `audio`): 8+ transcribed words = speech/recording, else music.
-- Speech goes to `Recordings/` + transcript, and the transcript runs the same Tier-1 secrets judge (a recorded password is still a password).
-- Music goes to `Music/<Artist>/[<Album>/]` from embedded tags (ffprobe), `Artist - Title` filename fallback.
+- **Redaction (`redact.py`)** runs first and fails closed: PEM blocks, JWTs, provider-key prefixes, URL credentials, `password:`-style assignments, long digit runs, high-entropy tokens; output capped at 4000 chars. If redaction fails, nothing is sent.
+- **Typed replies:** `extllm.py` demands `{"verdict":"CLEAN|SECRET","confidence":0-100}` (or the Jev probability); free text is never parsed, so a document cannot talk its way to a verdict.
+- **Cap:** `EXTERNAL_MONTHLY_CAP_USD` (default $2) against a ledger at `/var/lib/tvbox/spend.log` (tab-separated, per-tier estimates `CC_EST_*`). Free models are always allowed; paid tiers stop at the cap.
+- **No answer?** Retried up to 12 times (about an hour), then the Legion's verdict stands (logged `CLEAN?`). An external `SECRET` (confidence >= 50) moves the file to `private/`.
+- `price-check.sh` (daily) validates every configured id against the live `/provider/v1/models` list and writes `router.managed.conf` atomically with validated ids only. Edit tiers in `router.conf`.
+- Because the text is redacted, external models mostly judge *context* ("a note about a prod password"). That is the intended trade-off: they can raise a flag, they never see the secret.
+- Set `CC_ZDR=1` for zero-data-retention routing (models without a ZDR upstream are skipped; `typesafe/jev` has none).
 
-## Music metadata + fuzzy artists
-- Song name = filename (never renamed). Album = folder when the tag exists, else tracks sit directly under the artist.
-- Artist dedup is fuzzy (difflib >= 0.87 on whitespace-normalized names): "Beatles", "Beat les", "  beatles", one-letter typos all land in one folder. A new folder is created only when nothing existing is close.
+## Faces, audio, documents
+- **Faces:** Immich (InsightFace) on every photo incl. the read-only sorted `Photos/` external library; names live in Immich's DB (in the nightly dump).
+- **Audio:** whisper `small` on the Legion; 8+ words = speech -> `Recordings/` and judged like text; music -> `Music/<Artist>/[Album]/` from tags, else Jev splits the filename. Artist/album names are sanitised (no path separators, no leading dots). Fuzzy artist match >= 0.82.
+- **Documents:** filename first, summary second; `private/` is sub-sorted and blocked from every outside API.
 
-## Documents — filename first, summary second, private never leaves
-- Stage 0 (`sort-docs.sh --stage0`, TV box, zero network): filename + transcript regexes sort IDs / Finance / Health straight into `private/<Cat>/` — a driver's license has no "password" in it, so Tier-0 alone would miss it. This stage never calls anything, not even the Legion.
-- Stage 1 (`--stage1` via `categorize.sh`, Legion, your hardware): **Jev-first workflow**. Jev (System 1, `qwen2.5:3b`) sees the filename (highest weight), the current folder list, and a content excerpt, and answers EXISTING category or NEW. Only on NEW does System 2 (`qwen2.5:7b`) get asked — with the existing categories + content — to invent a short folder name. No fixed allowlist: folders grow themselves (`Documents/` subdirs are the category list). Each placement gets a one-line `.summary.txt` sidecar.
-- Music filenames get the same Jev treatment (`sort-music.sh`): `Artist - Title`, `Title - Artist`, or bare `Title` are split by general knowledge of actual artists/songs (a dumb splitter would file "Around The World - Daft Punk" under artist "Around The World"); known song titles with no artist tag are identified outright. Falls back to the dumb split only if the Legion is unreachable.
-- `private/` is fully sorted too (`IDs/ Finance/ Health/ Other/`), fully visible to you, and code-blocked from every outside API including paid escalation.
-
-## Offline Legion? (expected — it's a laptop)
-Uploads still land, sort, and stay visible. Docs get Tier 0 immediately; everything else waits as `pending-ai`, usable locally, excluded from offsite/cloud copy. Local USB restic backup includes all of it (never leaves the house). Queue drains when `legion-linux` or `legion-win` answers.
+## Offline Legion
+Uploads still land, sort and stay visible; documents get Tier 0 + stage-0 immediately; the rest waits in `.ai-queue` and drains when `legion-linux` or `legion-win` answers.

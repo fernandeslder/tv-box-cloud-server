@@ -59,7 +59,7 @@ cp -a /var/lib/samba/private/passdb.tdb "$DUMPS/samba-passdb.tdb" 2>/dev/null ||
 
 # ---- what to back up ----------------------------------------------------------
 INCLUDE="${BACKUP_INCLUDE:-$(env_get BACKUP_INCLUDE "Photos Documents private Recordings Other immich nextcloud-data")}"
-paths=("$DUMPS" "$ENV_FILE" "$REPO_DIR/configs/router.conf" "$TVBOX_ETC" "$REPO_DIR/docker/net/data" "$REPO_DIR/docker/cloud/data")
+paths=("$DUMPS" "/var/lib/tvbox" "$ENV_FILE" "$REPO_DIR/configs/router.conf" "$TVBOX_ETC" "$REPO_DIR/docker/net/data" "$REPO_DIR/docker/cloud/data")
 need=0
 for d in $INCLUDE; do
   [ -e "$STORAGE_ROOT/$d" ] || continue

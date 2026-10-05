@@ -1,39 +1,36 @@
-# 05 — Network: Pi-hole + Unbound + Caddy + Tailscale
+# 05 — Network: Pi-hole + Unbound + Caddy + Tailscale (+ Cloudflare)
 
-## Choice: Pi-hole v6 + Unbound (recursive)
-AdGuard Home is objectively easier (native DoH/DoT, per-client toggles) but you asked for Pi-hole — and v6 closed the gap (no more lighttpd/PHP, embedded web + REST, native HTTPS UI). Pi-hole+Unbound = only fully-recursive (no-third-party) option + biggest blocklist community.
+## DNS: Pi-hole v6 -> Unbound (recursive, no third party)
+Pi-hole answers `*.<domain>` with the box's LAN IP (`FTLCONF_misc_dnsmasq_lines`), everything else goes to Unbound. Blocklists to start: OISD Big + Hagezi Multi Pro. Never add a public resolver as "secondary" (clients load-share and bypass filtering).
 
-- Images: `pihole/pihole:latest` (~200MB), `mvance/unbound:latest`.
-- RAM: ~100MB + ~30MB. 1M domains fine on this box.
-- Blocklists to start: `OISD Big (https://big.oisd.nl)` + `Hagezi Multi Pro`. Don't stack 12 lists.
-- Do NOT run Pi-hole + AdGuard on one host (both need :53). No `1.1.1.1` as "secondary" — clients load-share and bypass filtering.
-
-## Ports (critical)
-| Host port | Owner |
+## Ports on the host
+| Port | Owner |
 |---|---|
-| 53/tcp+udp | Pi-hole only (`FTLCONF_dns_listeningMode: ALL`) |
-| 80,443 | Caddy only. Pi-hole web remapped to `8080:8080` via `FTLCONF_webserver_port: '8080o,[::]:8080o'` |
-| 5335 | Unbound internal only (Pi-hole upstream `unbound#5335`) |
-| 67/udp | nobody (DHCP stays on router) |
+| 53 tcp/udp | Pi-hole |
+| 80, 443 | Caddy (the only web entry) |
+| 445 | Samba |
+| nothing else | admin UIs are reachable only through Caddy by name |
 
-Do the `systemd-resolved` stub fix first (see `02-os-postinstall.md`).
+`ufw` allows private ranges + Tailscale only. (Docker-published ports bypass ufw, which is why only 53/80/443 are published at all.)
 
-## Split-DNS + Caddy
-- Caddy owns :80/:443, serves `*.home.lan` (or real domain via Cloudflare DNS-01 so LAN+WAN share one Let's Encrypt cert; pure-LAN `tls internal` is fine).
-- Pi-hole → Local DNS: `*.home.lan → <caddy-LAN-IP>`. Wildcard needs dnsmasq file (enable `misc.etc_dnsmasq_d` Expert first): `address=/.home.lan/192.168.x.10` in `/etc/dnsmasq.d/02-wildcard.conf`.
-- Router DHCP hands out Pi-hole IP as sole DNS. Optional firewall redirect outbound :53→Pi-hole (catches hardcoded TV/IoT DNS).
-- Compose: `docker/net/compose.yml`. See `.env.example` for `PIHOLE_PASS`.
+## Router
+1. **Reserve the box's IP** in the router (DHCP reservation). Wi-Fi -> Ethernet changes the IP: `tvbox-netwatch` notices and re-points DNS/Tailscale (`tvbox update-ip`), but the router DNS setting must follow.
+2. Make the router's DHCP hand out the box's IP as **DNS**. If your router (some Bell Home Hub firmwares) will not let you, set the DNS server by hand in each device's Wi-Fi settings (devices on Tailscale already get it through Split DNS). Until DNS points at the box, `https://<name>.<domain>` will not resolve on the LAN.
+Fallback if DNS breaks: set the router DNS back to your ISP's, then `docker logs pihole`.
 
-## Remote without port forwarding: Tailscale
-- Install on host (not in Compose): `tailscale up --accept-dns`. No router forwards.
-- Admin → DNS → Split DNS: `home.lan → 100.x.y.z` (Pi-hole tailnet IP).
-- Caddy binds LAN + tailnet. Don't use Tailscale Serve for throughput — Caddy `reverse_proxy` is ~5-10x faster.
-- FOSS note: Tailscale's client + coordination server are proprietary (free tier, zero config — the default here). Purist path: **Headscale** (FOSS coordination server, same clients join your own control plane, no Big-Tech login) or plain **WireGuard** (fully FOSS both ends, one config per device, more manual). Swap anytime — Caddy/Pi-hole don't care which VPN carries the packets.
+## TLS (Caddy)
+- **Domain on Cloudflare (recommended):** Caddy builds with the Cloudflare DNS plugin and gets a real wildcard cert via DNS-01 using your API token. Nothing to install on any device. The cert exists even though the names only resolve on your LAN/tailnet.
+- **No domain:** `tls internal` (own CA). Every device installs `https://setup.<domain>/root.crt` once.
 
-## Companion services (all behind Caddy, all `restart: unless-stopped`)
-- **Dockge** (`:5001`) — Compose-native Docker mgmt, lighter than Portainer.
-- **Homepage** (`:3000`) — family dashboard at `home.lan`.
-- **Uptime Kuma** (`:3001`) — monitor Pi-hole/Caddy/cloud.
-- **Beszel** (`:8090`) — lightweight metrics (better than Netdata here).
-- **Gluetun + qBittorrent** (separate `torrent/compose.yml`, `network_mode: service:gluetun`, kill-switch = netns, bind qbit to `tun0`, verify IP ≠ home IP).
-- **Watchtower fork `nickfedor/watchtower`** (containrrr is EOL): cron 4am, label-gated. Auto-update Homepage/Dockge/Kuma/Caddy only. **Exclude Pi-hole, Unbound, Gluetun, qBittorrent** (`enable=false`).
+## Away from home: Tailscale
+`60-tailscale-ssh.sh` installs it, enables forwarding and advertises your LAN subnet. Two one-time clicks in the Tailscale admin console: **approve the subnet route**, and add **Split DNS** `<domain>` -> the box's LAN IP. Then phones reach `photos.<domain>` exactly as at home. (FOSS purist path: Headscale or plain WireGuard — Caddy/Pi-hole don't care.)
+
+## Public share links (optional): Cloudflare Tunnel
+`scripts/cloudflare.sh` creates the tunnel + CNAMEs via the API (token needs Zone:Read, DNS:Edit, Account>Cloudflare Tunnel:Edit). The `cloudflared` container dials out; Caddy recognises tunnel traffic (`Cf-Connecting-Ip` header) and then:
+- **Nextcloud**: allows only share-link/static paths (`/s/*`, `/public.php*` …); `/login`, `/remote.php/dav`, `/apps/files` return 403.
+- **Immich**: blocks `/api/auth`, `/api/admin`, users/API keys and **uploads**; shared albums (key-protected by Immich) work.
+- Everything else (Pi-hole, dashboards, media…): 403.
+Limits: Cloudflare's free proxy caps request bodies at 100MB and discourages video streaming — upload large videos over Tailscale/LAN. **Verify a real share link end to end after setup**; if a share page misses assets, add the path in `docker/net/Caddyfile` (`@files_tunnel_blocked`).
+
+## Companion services
+Homepage (`home.`), Uptime Kuma (`status.`), Beszel (`metrics.`; pair once then `--profile agent`), Watchtower (only label-enabled UIs: never DNS, Caddy, databases, Immich, Nextcloud, VPN).

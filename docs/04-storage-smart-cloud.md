@@ -1,38 +1,46 @@
-# 04 — Storage + Smart Cloud (Immich + Nextcloud)
+# 04 — Storage: USB HDDs as the vault, the SSD as a write cache
 
-## Filesystem: ext4 per-disk + mergerfs pool
-Mismatched 1TB+4TB, growable — do NOT use ZFS/bcachefs/btrfs-RAID here.
+## Layout
+| Path | What | Where it physically lives |
+|---|---|---|
+| `/mnt/cache` | Postgres, MariaDB, thumbnails, transcodes, DB dumps | NVMe |
+| `/mnt/cache/landing` | write cache branch of the pool | NVMe |
+| `/mnt/hdd/data1`, `data2`… | data disks (role `data`) | USB HDD |
+| `/mnt/hdd/backup1` | backup disk (role `backup`, restic only) | USB HDD |
+| `/mnt/pool` | **the one folder everything uses** | mergerfs(landing + data disks) |
 
+Pool folders: `inbox/ Photos/ Documents/ Music/ Recordings/ Videos/ Other/ private/ duplicates/ immich/ nextcloud-data/ media/`. They are group `www-data`, setgid, so Samba, ingest and Nextcloud all read/write the same files.
+
+## How a write flows
+1. Phone/PC uploads -> mergerfs picks the first branch with space: the **SSD** (`category.create=ff`, `minfreespace=20G`). Full network speed, no HDD wait.
+2. `tvbox-mover.timer` (every 10 min, idle priority) copies files that are settled (>15 min untouched) **and** older than the keep window (3 days = read cache) to the data disk with the most free space, verifies byte-for-byte, then deletes the SSD copy.
+3. When the SSD passes **70% full** the mover ignores the keep window and drains oldest-first down to 50%.
+Tune in `docker/.env`: `MOVER_MIN_AGE_MIN`, `MOVER_KEEP_DAYS`, `MOVER_HIGH_PCT`, `MOVER_LOW_PCT`, `LANDING_MIN_FREE`.
+
+**Honest trade-off:** a file is on the SSD only until the mover runs. The window is short for big/old files and up to a few days for recent ones; if the SSD dies in that window, those files are lost. The nightly backup copies from the pool (SSD + HDD), so it covers them once it has run.
+
+## When a USB disk disconnects
+- `tvbox-storage.timer` (every minute) + a udev rule re-run `disks.sh sync`: a disk whose UUID reappears is fsck'd (`-p`), remounted and re-added to the pool **live** (no container restarts). A disk that stopped answering is lazily unmounted and removed from the pool.
+- Meanwhile `/mnt/pool` never disappears (the SSD branch is always there): uploads continue; reads of files only on the missing disk fail until it returns. `tvbox status` shows `OFFLINE`; `tvbox doctor` says what to do.
+- Empty mountpoints are `chattr +i`, so nothing can silently write into `/mnt/hdd/data1` on the SSD while the disk is away. Every disk carries a `.tvbox-disk` sentinel checked before use.
+- USB autosuspend is turned off for mass-storage devices (udev). If a specific enclosure still drops, see "Troubleshooting USB" below.
+
+## Adding / replacing disks
 ```bash
-# /etc/fstab (UUIDs from blkid, use nofail + automount)
-UUID=<1TB-UUID>  /mnt/disk1 ext4 defaults,nofail,x-systemd.automount 0 2
-UUID=<4TB-UUID>  /mnt/disk2 ext4 defaults,nofail,x-systemd.automount 0 2
-/mnt/disk* /mnt/pool fuse.mergerfs defaults,allow_other,use_ino,category.create=mfs,moveonenospc=true,minfreespace=20G,fsname=mergerfs 0 0
+sudo tvbox disks scan                       # blank / has-data / system
+sudo tvbox disks add /dev/sdX data          # formats ext4 after you type ERASE sdX
+sudo tvbox disks add /dev/sdY backup
 ```
+Disks with existing data need `--force` (and still ask). The system disk is never offered.
 
-## SSD vs HDD roles
-- SSD `/mnt/cache` (ext4, 238GB NVMe): `/var/lib/docker`, Postgres, Redis, Immich `thumbs/encoded-video`, Nextcloud previews, model-cache. This is the "1GB/s ingest" feel — HDD sequential (~180MB/s) already saturates 1Gbps (125MB/s); DB/thumbs latency is the real bottleneck.
-- Pool `/mnt/pool`: `inbox/` (single Uploads target, drained by ingest), `Photos/ Documents/ Music/ Recordings/ Videos/ Other/ private/` (ingest sorted, all in Nextcloud), `immich/` (photo originals), `files/` (Nextcloud data), `media/` (Jellyfin), `backups/`.
-- Optional SSD landing + nightly mover (`rsync --remove-source-files` + rescan) — simpler to write originals direct to pool and keep thumbs on SSD.
+## Photos = Immich
+Originals land in `/mnt/pool/immich`; thumbnails and encoded video live on the SSD. The sorted `Photos/` tree is added automatically as a **read-only external library** (`/external/photos`) so faces and search cover everything with no duplication. Phone: Immich app auto-backup. Faces: name each person once in the People view.
 
-## Photos = Immich (primary)
-- Server + Postgres (`pgvector/pgvector:pg16`) + Redis on SSD; `UPLOAD_LOCATION=/mnt/pool/immich`.
-- Phone: Immich app auto-backup (incremental, background). Nextcloud app only for docs.
-- No manual folders: timeline + map + CLIP search + faces + auto-albums. Ollama captions → Immich API tags (see `06-ai-classification.md`).
-- Faces: detection is automatic (InsightFace in immich-ml). You name each person once in the app's People view; from then on search "Maya" and get every photo of Maya. To cover the sorted folders too, add `/mnt/pool/Photos` as an Immich **external library** (read-only) — faces + search over everything, zero duplication.
-- Compose: `docker/cloud/compose.yml`. Keep local `immich-machine-learning` as CPU fallback; prefer remote CUDA on laptop.
+## Files = Nextcloud
+Data dir `/mnt/pool/nextcloud-data`; MariaDB on the SSD. `post-install.sh` links the sorted folders (`Uploads Photos Documents Music Videos Recordings Other` + admin-only `private`) as **External Storage**, so everything the ingest sorts is visible in Nextcloud. Set the phone app's auto-upload folder to **Uploads**.
 
-## Uploads: everything lands in `inbox/`
-- `inbox/` is the single Uploads target: point the Nextcloud phone app's auto-upload folder at it, save manual downloads (music, photos, files) straight into it, symlink `~/Uploads` to it. `ingest.sh` drains it into sorted folders; nothing lives in `inbox/` permanently.
+## Backups (3-2-1, local half)
+Dedicated backup disk, restic, nightly 03:30: Photos, Documents, private, Recordings, Other, immich, nextcloud-data + DB dumps + configs. Videos/Music/media are skipped by default (re-downloadable; size). Details and restore: `08-ops-runbook.md`.
 
-## Files = Nextcloud (+ Memories)
-- Docs/files only, data dir `/mnt/pool/files`. If you want pure speed over collaboration, swap to **Seafile** (SeafDrive virtual disk, faster than WebDAV).
-- Do NOT point Immich + Nextcloud Photos + PhotoPrism at the same library. `Immich=photos, Nextcloud=files`.
-
-## Backup (3-2-1)
-- Nightly `restic -r /mnt/usb/restic backup /mnt/pool --exclude thumbs`, `forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6`.
-- Weekly `restic copy` / `rclone sync` encrypted to B2/Storj (~$6/TB/mo, paid + proprietary APIs — optional). The free path is USB + second disk; offsite is a luxury, not a requirement. Test `restic mount` restore quarterly.
-- SnapRAID: skip now (4TB parity for 1TB data = wasteful). Add when you have 2 data disks + parity disk ≥ largest data disk.
-
-## Order
-1. ext4 + mergerfs pool, 2. Immich + Postgres on SSD, 3. remote ML on laptop via Tailscale, 4. Nextcloud/Seafile only if needed, 5. Presidio sidecar, 6. restic to USB, 7. add 4TB + SnapRAID later.
+## Troubleshooting USB
+Frequent `reset`/`disconnect` in `dmesg`: try another cable/port, a powered hub or the enclosure's own PSU; as a last resort disable UAS for that enclosure (`usb-storage.quirks=VID:PID:u` on the kernel command line — find the IDs with `lsusb`).

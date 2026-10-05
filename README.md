@@ -1,59 +1,69 @@
 # TV Box + Cloud Server
 
-One always-on box, HDMI to TV. Two jobs:
-1. **TV box** — couch UI for YouTube, Twitch, Moonlight (gaming PC), browser, IPTV, Stremio + Torrentio.
-2. **Smart cloud server** — SSD ingest cache + 1TB + 4TB HDD pool, auto phone upload, automatic classification, local secrets screening, Pi-hole ad-blocking.
+One always-on box, HDMI to the TV, two jobs:
 
-Target hardware: AMD Ryzen 5 PRO 4650U + Radeon iGPU, 14GB RAM, 238GB NVMe (cache), 1TB + 4TB HDDs (added later).
-AI offload machine: Legion 7, RTX 4080 Laptop 12GB VRAM + 32GB RAM, dual-boot Windows 11 / CachyOS (see `docs/10-legion-ai-server.md`). May be offline — uploads queue as `pending-ai` until it returns.
-OS target: **Ubuntu 24.04 LTS + Plasma minimal + Kodi** (see `docs/`).
+1. **TV box** — Kodi, YouTube, Twitch, Moonlight, Stremio, IPTV, music, movies.
+2. **Personal cloud** — phone photo backup (Immich), files (Nextcloud), a Windows/Mac network drive (Samba), ad-blocking DNS (Pi-hole), secret-screening of everything you upload.
 
-## Quick start (after OS flash)
+**Storage model:** your **USB hard disks hold the data**; the **internal SSD is a write cache** so uploads run at full speed and a mover drains them to the HDDs in the background. If a USB cable wiggles loose, uploads keep landing on the SSD and catch up when the disk returns.
+
+## Install (fresh machine → running server)
 
 ```bash
-git clone https://github.com/fernandeslder/tv-box-cloud-server.git ~/tv-box-cloud-server
-cd ~/tv-box-cloud-server
-cp docker/.env.example docker/.env && nano docker/.env
-sudo ./scripts/install.sh
-cd docker && docker compose config --quiet && docker compose up -d
-./scripts/90-verify.sh
+curl -fsSL https://raw.githubusercontent.com/fernandeslder/tv-box-cloud-server/master/bootstrap.sh | sudo bash
 ```
 
-## Layout
+or, from a clone: `sudo ./setup.sh`
+
+It asks a handful of questions (domain, TV desktop yes/no, optional extras), **generates every password itself**, detects and formats your blank USB disks after you type `ERASE`, installs Docker, starts everything, and prints one address to open on your phone: `https://setup.<your-domain>` (app links, QR codes, network-drive instructions).
+
+Zero-touch from a bare USB stick: [`autoinstall/`](autoinstall/README.md). Flash guide: [`docs/01-flash-guide.md`](docs/01-flash-guide.md).
+
+## Day to day
+
+```bash
+tvbox status      # storage, containers, addresses
+tvbox doctor      # health check with plain-English fixes
+tvbox backup      # run the backup now (also nightly)
+tvbox disks       # USB disk status / add a disk
+tvbox update      # pull new versions
+tvbox help
+```
+
+## What you get
+
+| Address | What |
+|---|---|
+| `setup.<domain>` | One-page phone/PC onboarding: apps, QR codes, root cert (LAN-only mode), network drive |
+| `photos.<domain>` | Immich — camera-roll backup, faces, search |
+| `files.<domain>` | Nextcloud — documents, sync, sharing; your sorted library appears as folders |
+| `\\tvbox\Uploads`, `\\tvbox\Cloud` | Samba shares. Drop anything in **Uploads**; it is sorted automatically |
+| `home.<domain>`, `status.`, `metrics.`, `pihole.` | Dashboard, uptime, metrics, ad-blocking admin |
+| `tv.`, `music.`, `audio.` | Jellyfin, Navidrome, Audiobookshelf (optional profile) |
+
+Away from home: install Tailscale on the phone and everything works the same. Optional **public share links** (Nextcloud shares, Immich shared albums) go through a Cloudflare Tunnel — no port forwarding, works with a dynamic IP — and expose *only* share pages, never logins or admin.
+
+## Repository map
 
 ```
-README.md
-docs/           # full plan: flash, OS, HTPC, storage, AI, Pi-hole, ops, roadmap
-docker/         # compose stacks (net, cloud, media) + .env.example
-scripts/        # idempotent bootstrap (safe to re-run via SSH / agent)
-configs/        # sddm, resolved, fstab, kodi snippets
-backups/        # backup.sh + policy
+setup.sh, bootstrap.sh     the entry points
+scripts/                   installer steps (10-60), tvbox CLI, disks.sh, mover.sh, ingest + AI pipeline
+docker/                    compose stacks: net (DNS, Caddy, tunnel, dashboards), cloud, media (profiles)
+configs/                   systemd units (templated), Samba, SSH, router.conf.example
+backups/                   restic backup + restore
+clients/                   Windows / Mac / Linux "connect me" helpers
+legion/                    one-command setup for the GPU worker (Windows + CachyOS)
+autoinstall/               unattended Ubuntu install seed
+tests/                     bats suite (also runs in CI)
+docs/                      the full plan; start with 00-overview.md
 ```
 
-## Service map (final)
+## Docs
 
-| Stack | Services | Access |
-|---|---|---|
-| HTPC (bare metal, not Docker) | Kodi, VacuumTube, Firefox, Moonlight-qt, Stremio, IPTVnator, Spotube | TV HDMI |
-| net | Pi-hole v6 + Unbound, Caddy, Tailscale, Dockge, Homepage, Uptime Kuma, Beszel, Watchtower | `*.home.lan` |
-| cloud | Immich + Postgres + Redis, Nextcloud (files), TruffleHog + local LLM secrets gate, restic | `photos.home.lan`, `files.home.lan` |
-| media/dl (opt-in) | Jellyfin, Navidrome (self-hosted Spotify), Audiobookshelf, qBittorrent + Gluetun, Prowlarr/Sonarr/Radarr | `jellyfin.home.lan` |
-| Legion 7 (AI worker) | Ollama (`qwen2.5:3b` secrets judge + `moondream` vision) + Immich remote ML `:3003` | Tailscale only |
+[`00-overview`](docs/00-overview.md) · [`01-flash-guide`](docs/01-flash-guide.md) · [`02-os-postinstall`](docs/02-os-postinstall.md) · [`03-htpc-tv`](docs/03-htpc-tv.md) · [`04-storage-smart-cloud`](docs/04-storage-smart-cloud.md) · [`05-network-pihole`](docs/05-network-pihole.md) · [`06-ai-classification`](docs/06-ai-classification.md) · [`07-remote-access`](docs/07-remote-access.md) · [`08-ops-runbook`](docs/08-ops-runbook.md) · [`09-roadmap-ideas`](docs/09-roadmap-ideas.md) · [`10-legion-ai-server`](docs/10-legion-ai-server.md) · [`requirements`](docs/requirements.md) · [`review fixes`](docs/review-fixes.md)
 
-## Docs index
+## Status
 
-- `docs/00-overview.md` — goals, architecture diagram
-- `docs/01-flash-guide.md` — full OS setup checklist (USB → installer → first boot)
-- `docs/02-os-postinstall.md` — drivers, autologin, VA-API
-- `docs/03-htpc-tv.md` — Kodi + apps + remotes
-- `docs/04-storage-smart-cloud.md` — mergerfs + Immich + Nextcloud
-- `docs/05-network-pihole.md` — Pi-hole + Unbound + Caddy + Tailscale
-- `docs/06-ai-classification.md` — secrets screening (TruffleHog + local LLM judge) + OCR
-- `docs/07-remote-access.md` — SSH + agent reinstall flow
-- `docs/08-ops-runbook.md` — updates, backup/restore
-- `docs/09-roadmap-ideas.md` — extras I recommend
-- `docs/10-legion-ai-server.md` — Legion 7 setup (do in parallel with TV box install)
+Everything is lint-clean and unit-tested (`bats tests`: shellcheck, `docker compose config`, Caddy validation, the mover, router, redactor, ingest, wizard). The parts that need real hardware — formatting disks, mounts, systemd, container start, Cloudflare/Tailscale accounts — were written carefully but have **not yet run on the box**; `docs/review-fixes.md` lists exactly what to watch on first boot.
 
-Status: **planning phase**. Nothing is installed by these docs alone. Run `scripts/install.sh` only on the flashed target.
-
-**FOSS policy:** free first, open source preferred, paid last-resort via router — `docs/00-overview.md`.
+MIT licensed — see [LICENSE](LICENSE).

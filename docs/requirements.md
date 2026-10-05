@@ -1,36 +1,38 @@
-# Requirements (compiled from owner notes — source of truth for reviews)
+# Requirements (source of truth — compiled from the owner's answers)
 
 ## Device + roles
-- One always-on box over HDMI to a smart TV: doubles as TV box + personal cloud server.
-- TV: YouTube, Twitch, Moonlight (gaming PC), browser, IPTV, Stremio + Torrentio, own music (Navidrome, self-hosted Spotify), Jellyfin for local media. USB HID remotes work; x86 has no native HDMI-CEC.
-- Network: Pi-hole ad-blocking required. Tailscale for remote (free = fine); Headscale/WireGuard documented as FOSS purist path.
-- Repo must be fully reproducible: flash → git clone → install.sh → compose up; agent-redoable over SSH. Lives at github.com/fernandeslder/tv-box-cloud-server.
+- One always-on box (ThinkPad-class laptop chassis: Ryzen 5 PRO 4650U, 14GB, 238GB NVMe) over HDMI to a TV: TV box + personal cloud.
+- TV: YouTube, Twitch, Moonlight, browser, IPTV, Stremio + Torrentio, own music (Navidrome), Jellyfin. USB HID remotes; no native HDMI-CEC on x86.
+- Network: Pi-hole required; Wi-Fi now, **Ethernet later** (the installer must survive the IP change).
+- Reproducible: flash -> one command -> running. Agent-redoable over SSH. Repo: github.com/fernandeslder/tv-box-cloud-server (public; no secrets in it).
+
+## Setup experience (owner's priority)
+- One command + interactive wizard that generates all secrets; phone onboarding page with QR codes; Windows/Mac/Linux client helpers; one-command Legion setup (Windows + CachyOS); autoinstall USB seed. Works on any apt-based distro and any username.
 
 ## Storage
-- 238GB NVMe = cache (Docker, DBs, thumbs). 1TB + 4TB HDDs (later) = mergerfs pool, ext4 per-disk, no RAID/ZFS.
-- 1Gbps LAN uploads. Auto phone photo upload. No manual folders — everything auto-sorted, always visible to the owner (Nextcloud/Immich), scanned or not.
-- `inbox/` is the single Uploads target (phone auto-upload + manual downloads). Sorted trees: Photos/ Documents/ Music/ Recordings/ Videos/ Other/ + private/.
+- **Data on external USB HDDs; the internal SSD is a write cache** (fast ingest) plus DBs/thumbnails. 1TB + 4TB blank disks, formatted ext4 by the installer after explicit confirmation. Largest = data, the other = backup.
+- Must tolerate a loose/disconnecting USB cable: keep working from the SSD, re-attach automatically, never write into an empty mountpoint.
+- Backup is a **dedicated disk** (never the same disk as the data); important folders only if it is smaller.
+- `inbox/` is the single Uploads target; sorted trees Photos/ Documents/ Music/ Recordings/ Videos/ Other/ + private/ are visible in Samba, Nextcloud, and Photos is an Immich external library.
+
+## Cloud
+- Phone photo backup (Immich), phone/PC file sync + web UI (Nextcloud), Samba network shares, sharing with other people, access away from home via Tailscale.
+- Domain: **lder.fyi** on Cloudflare (dynamic IP on Bell): trusted certs via DNS-01; **public only for Nextcloud share links + Immich shared albums** via a Cloudflare Tunnel; everything else Tailscale/LAN only.
+- Email server: **deferred**.
 
 ## Threat model (secrets, not PII)
-- Only secret credentials matter (API keys, passwords, tokens, private keys). Names/addresses are NOT a concern.
-- Secrets live in `private/` — still visible to owner, same apps. NOTHING unprocessed or secret-bearing goes to outside APIs (only TV box + Legion, which are owned). Clean-screened files may use outside APIs if enabled.
+- Only credentials matter (API keys, passwords, tokens, private keys). Names/addresses are not a concern.
+- Secrets live in `private/` — still visible to the owner. Nothing secret-bearing goes to outside APIs.
+- Calls to the owner's own Legion need no redaction. **Calls to any external API are redacted.**
+- Security stance: convenience first (private-LAN firewall, no hardening that costs usability), but nothing admin-facing published to the LAN, and public exposure is share-links only.
 
-## AI offload (Legion 7: RTX 4080 12GB, 32GB, dual-boot Win11/CachyOS, often offline)
-- Heavy models on Legion via Tailscale (`legion-linux`/`legion-win` hostnames). Offline-tolerant: default-deny queue, `pending-ai` usable locally, excluded from offsite copy; CPU fallbacks where possible.
-- VRAM rule: one workload family at a time; Ollama max-1-loaded + 5-min eviction.
+## AI
+- Everything on by default: Tier 0 TruffleHog, Jev judge on the Legion, sorting, faces, whisper, vision.
+- External provider: **Command Code Provider API**. Choose the intelligence level needed: `typesafe/jev` -> free models -> cheap-but-strong (deepseek, glm, mimo, kimi, muse) -> strong only if allowed. Monthly cap; free always allowed.
+- Legion 7 (RTX 4080 12GB, dual-boot Win11/CachyOS, often offline): queue waits; one workload family at a time.
 
-## Cost policy
-- Priority: FREE first, self-hosted second (even closed-source), FOSS preferred, PAID last-resort minimized by a confidence-gated router (transcript-only ~4KB escalation, monthly cap, ledger). Paid OFF by default.
-- Daily price-check refreshes cheapest paid + free picks (OpenRouter catalog). Free escalation ladder: OpenCode CLI free tier ($0 quota) → OpenRouter :free → paid capped.
+## System 1 vs System 2
+- System 1 (Jev) = typed decisions (noul/choice/score), never parsed prose; malformed = defer. Fallback: Legion -> local NanoJev -> defer. System 2 (qwen2.5:7b) only invents category names.
 
-## System 1 vs System 2 (Jev, not Jeff)
-- System 1 = decision model: typed noul/choice/score with calibrated confidence, never parsed prose (`scripts/jev.sh` over Ollama structured outputs; exit 2 = defer).
-- Jev engine default qwen2.5:3b-instruct is a stand-in; real drop-ins: Kev, Laya, SemIf, NanoJev 0.6B.
-- System-1 fallback chain: Legion engine → local NanoJev (TV-box CPU) → defer. NEVER System 2 for System-1 decisions. Valid low-confidence = answer, not failure.
-- System 2 (qwen2.5:7b) generative lane ONLY: invents new category names. Categorization workflow: fit existing → else NEW → System 2 names → file it.
-
-## Sorting specifics
-- Faces: Immich auto-detect (InsightFace), name once in app, search by person; sorted Photos/ as read-only external library.
-- Audio: whisper speech-vs-music (8+ words = recording → Recordings/ + transcript judged like any text); music → Music/<Artist>/[<Album>/], filename = song name, never renamed; fuzzy artist dedup (the/typo/space-insensitive, ~0.82).
-- Music filenames (Artist-Title / Title-Artist / Title-only) split by Jev general knowledge, dumb-split fallback only.
-- Documents: filename-first priority + one-line summary sidecar; stage-0 local regexes (IDs/Finance/Health → private/, zero network) run BEFORE any model; secrets-hit docs also sub-sorted into private/.
+## Sorting
+- Faces via Immich; audio speech-vs-music via whisper (8+ words = speech); music -> Music/<Artist>/[Album]/ with fuzzy artist dedup (>= 0.82); documents filename-first with stage-0 local rules (IDs/Finance/Health -> private/) before any model.

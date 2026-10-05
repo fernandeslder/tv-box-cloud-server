@@ -14,6 +14,7 @@ render "$REPO_DIR/configs/systemd/99-tvbox-usb.rules" /etc/udev/rules.d/99-tvbox
 udevadm control --reload 2>/dev/null || true
 
 register_disks() {
+  "$REPO_DIR/scripts/disks.sh" adopt || true
   local plan="${TVBOX_DISKS:-$(env_get TVBOX_DISKS)}" item dev role
   if [ -n "$plan" ]; then
     for item in ${plan//,/ }; do

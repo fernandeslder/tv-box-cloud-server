@@ -1,42 +1,16 @@
-# 02 — OS Postinstall (drivers, desktop, autologin)
+# 02 — OS postinstall (what the installer does for you)
 
-Run via `scripts/install.sh` (idempotent) or manually:
+`sudo ./setup.sh` runs these idempotent steps; each can be run alone:
 
-```bash
-# drivers + VA-API (Renoir VCN2.2: H264/HEVC/VP9, no AV1 decode)
-sudo apt install -y mesa-va-drivers mesa-vdpau-drivers mesa-vulkan-drivers \
-  vainfo libva2 firmware-sof-signed pipewire wireplumber bluetooth bluez
-vainfo | grep -iE "VA-API|H264|HEVC|VP9"
+| Script | Does |
+|---|---|
+| `10-base.sh` | packages (restic, rclone, mergerfs, samba, avahi, tesseract…), no-sleep/lid-ignore for a laptop chassis, hostname |
+| `20-desktop-htpc.sh` | Plasma + SDDM + Kodi + Firefox + mpv, autologin for **your** account (skipped when headless) |
+| `30-docker.sh` | Docker CE + compose (Ubuntu/Debian/Mint), log rotation, "start after storage" ordering |
+| `40-storage.sh` | SSD cache + USB disks + pool + folder skeleton + units (see `04`) |
+| `50-network-dns.sh` | frees :53 (resolved stub off), ufw (private LAN + Tailscale) |
+| `60-tailscale-ssh.sh` | Tailscale + LAN subnet router, key-only SSH *if a key exists* |
 
-# desktop + HTPC session (minimal Plasma, SDDM, Kodi)
-sudo apt install -y plasma-desktop sddm kodi kodi-pvr-iptvsimple \
-  firefox mpv yt-dlp cec-utils libcec4 flatpak
-sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+Trade-off to know: the TV desktop auto-logs in as your account, and your account is in the `docker` group (root-equivalent). That is the convenience-first choice for a living-room box. For a stricter box answer "no TV" in the wizard (headless) and keep the account locked down.
 
-# Docker CE (Ubuntu repo docker.io is OK, but CE tracks compose v2 faster)
-# see scripts/30-docker.sh
-
-# mergerfs + tools
-sudo apt install -y mergerfs smartmontools restic rclone htop
-```
-
-## SDDM autologin (`configs/sddm/autologin.conf`)
-```ini
-[Autologin]
-User=htpc
-Session=plasma.desktop
-```
-Kodi standalone session (`kodi.desktop`) stays selectable at login; autostart `kodi -fs` via `~/.config/autostart/kodi.desktop` if you want boot-to-Kodi.
-
-## systemd-resolved fix (required before Pi-hole)
-```bash
-sudo mkdir -p /etc/systemd/resolved.conf.d
-printf "[Resolve]\nDNSStubListener=no\n" | sudo tee /etc/systemd/resolved.conf.d/no-stub.conf
-sudo rm -f /etc/resolv.conf && sudo ln -s /run/systemd/resolve/resolv.conf /etc/resolv.conf
-sudo systemctl restart systemd-resolved
-ss -tulnp | grep :53  # must be empty
-```
-Do NOT fully disable `systemd-resolved` — breaks netplan/VPN.
-
-## Verify
-`./scripts/90-verify.sh`: `vainfo`, `docker ps`, `mountpoint /mnt/pool`, `tailscale status`, `dig @127.0.0.1 google.com`.
+Verify: `tvbox doctor`.

@@ -4,6 +4,7 @@
 #   disks.sh scan                      list candidate disks (blank / has data / system)
 #   disks.sh add <dev> data|backup [label] [--yes] [--force]
 #                                      format ext4 (blank disks only unless --force), register it
+#   disks.sh adopt                     re-register disks this tool formatted earlier (label tvbox-*), e.g. after a re-flash
 #   disks.sh sync                      idempotent: mount what is present, drop what vanished,
 #                                      keep the SSD+HDD pool mounted. Safe to run every minute.
 #   disks.sh status                    human summary (also used by `tvbox status`)
@@ -109,6 +110,22 @@ register() {  # register uuid role label — also writes the sentinel on first m
   grep -q "^$1|" "$DISKS_CONF" || printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$DISKS_CONF"
 }
 
+# ---------------------------------------------------------------- adopt
+# After a re-flash /etc/tvbox is gone but the disks still carry their tvbox-<label> filesystem label.
+# Non-destructive: nothing is formatted or written except the registry line.
+adopt() {
+  local n=0 name label uuid fstype role
+  while read -r name label uuid fstype; do
+    case "$label" in tvbox-*) ;; *) continue ;; esac
+    [ "$fstype" = ext4 ] && [ -n "$uuid" ] || continue
+    grep -q "^$uuid|" "$DISKS_CONF" 2>/dev/null && continue
+    label="${label#tvbox-}"
+    case "$label" in backup*) role=backup ;; *) role=data ;; esac
+    register "$uuid" "$role" "$label"; ok "adopted $name as $label ($role)"; n=$((n + 1))
+  done < <(lsblk -rno NAME,LABEL,UUID,FSTYPE 2>/dev/null | awk 'NF==4')
+  [ "$n" -gt 0 ] || echo "adopt: nothing new to adopt"
+}
+
 # ---------------------------------------------------------------- sync
 mount_disk() {  # mount_disk uuid label
   local uuid="$1" label="$2" mp dev
@@ -191,8 +208,9 @@ status() {
 
 case "${1:-status}" in
   scan) scan ;;
+  adopt) need_root; adopt ;;
   add) shift; need_root; add "$@" ;;
   sync) need_root; sync_all ;;
   status) status ;;
-  *) echo "usage: disks.sh scan|add|sync|status" >&2; exit 2 ;;
+  *) echo "usage: disks.sh scan|add|adopt|sync|status" >&2; exit 2 ;;
 esac

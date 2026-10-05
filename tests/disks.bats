@@ -15,3 +15,18 @@ teardown() { rm -rf "$T"; }
 @test "add refuses without a role / a real block device" {
   run "$REPO/scripts/disks.sh" add /dev/null; [ "$status" -ne 0 ]
 }
+@test "adopt re-registers tvbox-labelled ext4 disks and ignores everything else" {
+  mkdir -p "$T/bin"; cat > "$T/bin/lsblk" <<'F'
+#!/bin/sh
+printf 'sda1 tvbox-data1 AAAA-1111 ext4\nsdb1 tvbox-backup1 BBBB-2222 ext4\nsdc1 Photos CCCC-3333 ext4\nsdd1 tvbox-x DDDD-4444 ntfs\n'
+F
+  chmod +x "$T/bin/lsblk"
+  # run the adopt function without the root-only CLI dispatch
+  cp -r "$REPO/scripts" "$T/s"; sed '/^case "${1:-status}" in/,$d' "$REPO/scripts/disks.sh" > "$T/s/disks-lib.sh"
+  PATH="$T/bin:$PATH" run bash -c ". '$T/s/disks-lib.sh'; adopt"
+  [ "$status" -eq 0 ]
+  grep -q '^AAAA-1111|data|data1$' "$DISKS_CONF"
+  grep -q '^BBBB-2222|backup|backup1$' "$DISKS_CONF"
+  ! grep -q CCCC "$DISKS_CONF"; ! grep -q DDDD "$DISKS_CONF"
+  PATH="$T/bin:$PATH" run bash -c ". '$T/s/disks-lib.sh'; adopt"; [ "$(grep -c AAAA "$DISKS_CONF")" -eq 1 ]
+}
