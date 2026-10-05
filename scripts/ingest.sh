@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-# ingest.sh — sort inbox uploads by type, Tier-0 scan docs, route secrets to private/.
+# ingest.sh — sort inbox uploads by type, Tier-0 scan documents, route secrets to private/.
 # Usage: ./ingest.sh <inbox-dir>
-# EVERYTHING stays accessible to you in Nextcloud/Immich. Only EXTERNAL sending is gated.
-#   Photos/ Documents/ Music/ Videos/ Other/  — type-sorted, usable immediately
-#   private/                            — secrets found, still yours, just separated
+# EVERYTHING stays accessible to you (Samba/Nextcloud/Immich). Only EXTERNAL sending is gated.
+#   Photos/ Documents/ Music/ Recordings/ Videos/ Other/   type-sorted, usable immediately
+#   private/                                                secrets + IDs/finance/health, still yours
+# Safe to run concurrently (flock), skips files still being written, never overwrites (safe-move).
 set -euo pipefail
 cd "$(dirname "$0")"
 INBOX="${1:?usage: ingest.sh <inbox-dir>}"
 POOL="${POOL_ROOT:-/mnt/pool}"
-QUEUE="$POOL/.ai-queue"
+QUEUE="${AI_QUEUE_DIR:-$POOL/.ai-queue}"
+SETTLE_MIN="${INGEST_SETTLE_MIN:-2}"       # a file must be untouched this long (mid-upload guard)
 mkdir -p "$POOL/Photos" "$POOL/Documents" "$POOL/Music" "$POOL/Recordings" "$POOL/Videos" "$POOL/Other" "$POOL/private" "$QUEUE"
+
+LOCK="${INGEST_LOCK:-$QUEUE/.ingest.lock}"
+exec 9>"$LOCK"; flock -n 9 || { echo "ingest: already running"; exit 0; }
 
 filetype() {
   local ext="${1##*.}"
@@ -26,53 +31,70 @@ filetype() {
   esac
 }
 
-extract_text() {  # $1=file $2=out.txt — best-effort, empty is fine
-  case "$1" in
-    *.pdf|*.PDF) pdftotext "$1" "$2" 2>/dev/null || true ;;
-    *.txt|*.md|*.csv) head -c 20000 "$1" > "$2" 2>/dev/null || true ;;
-    *) tesseract "$1" stdout -l eng > "$2" 2>/dev/null || true ;;  # scans / screenshots
+zip_text() {  # zip_text <file> <member-glob...>  -> tag-stripped text from OOXML/ODF/epub members
+  unzip -p "$1" "${@:2}" 2>/dev/null | sed -e 's/<[^>]*>/ /g' | tr -s '[:space:]' ' ' | head -c 60000
+}
+extract_text() {  # $1=file $2=out.txt — best effort; empty is fine
+  local f="$1" out="$2" lc
+  lc="$(printf '%s' "$f" | tr '[:upper:]' '[:lower:]')"
+  case "$lc" in
+    *.pdf)
+      pdftotext -l 20 "$f" "$out" 2>/dev/null || true
+      if [ ! -s "$out" ] || [ "$(wc -w < "$out")" -lt 5 ]; then   # scanned PDF: OCR first pages
+        local d; d="$(mktemp -d)"
+        pdftoppm -r 150 -f 1 -l 3 -png "$f" "$d/p" 2>/dev/null || true
+        for p in "$d"/p*.png; do [ -e "$p" ] && tesseract "$p" stdout -l eng 2>/dev/null >> "$out" || true; done
+        rm -rf "$d"
+      fi ;;
+    *.txt|*.md|*.csv|*.rst) head -c 60000 "$f" > "$out" 2>/dev/null || true ;;
+    *.docx) zip_text "$f" 'word/document.xml' > "$out" ;;
+    *.xlsx) zip_text "$f" 'xl/sharedStrings.xml' > "$out" ;;
+    *.pptx) zip_text "$f" 'ppt/slides/slide*.xml' > "$out" ;;
+    *.odt|*.ods|*.odp) zip_text "$f" 'content.xml' > "$out" ;;
+    *.epub) zip_text "$f" '*.xhtml' '*.html' > "$out" ;;
+    *.doc|*.xls|*.ppt) strings -n 6 "$f" 2>/dev/null | head -c 60000 > "$out" || true ;;
+    *.jpg|*.jpeg|*.png|*.tif|*.tiff|*.bmp) tesseract "$f" stdout -l eng > "$out" 2>/dev/null || true ;;
+    *) : > "$out" ;;
   esac
+  [ -f "$out" ] || : > "$out"
 }
 
-for src in "$INBOX"/*; do
-  [ -e "$src" ] || { echo "inbox empty"; exit 0; }
+queue() { echo "$1" > "$QUEUE/$(basename "$1").pending"; }
+
+# Oldest first, only settled files, skip in-flight temp names from sync clients.
+while IFS= read -r -d '' src; do
   [ -f "$src" ] || continue
-  base="$(basename "$src")"
+  case "$(basename "$src")" in *.part|*.partial|*.tmp|*.crdownload|.~lock.*|~\$*|.DS_Store|Thumbs.db) continue ;; esac
   type="$(filetype "$src")"
-  # safe-move: same content -> duplicates/ (you review), different -> "name (1).ext". Never overwrites.
   dest="$(./safe-move.sh "$src" "$POOL/$type")"
   base="$(basename "$dest")"
   echo "SORTED [$type] $base"
 
-  if [ "$type" = "Documents" ]; then
-    # Job/sidecar names keep the FULL basename (a.pdf + a.txt must not collide).
+  # Stage-0 on the FILENAME for every type: "passport.jpg" is private whatever it contains.
+  if [ "$type" != Documents ] && ./sort-docs.sh --stage0 "$dest" /dev/null >/dev/null 2>&1; then
+    echo "PRIVATE-SORTED $base (filename rule)"; continue
+  fi
+
+  if [ "$type" = Documents ]; then
+    # Sidecar names keep the FULL basename (a.pdf + a.txt must not collide).
     txt="$QUEUE/$base.transcript"
     extract_text "$dest" "$txt"
     rc=0; ./scan-secrets.sh "$dest" >/dev/null 2>&1 || rc=$?
-    if [ "$rc" -eq 0 ]; then
-      # Stage-0 local rules first: IDs/finance/health go private/ even with
-      # zero secrets found (a driver's license has no "password" in it).
-      rc0=0; ./sort-docs.sh --stage0 "$dest" "$txt" >/dev/null 2>&1 || rc0=$?
-      if [ "$rc0" -eq 0 ]; then
-        echo "PRIVATE-SORTED $base (no queue)"
-        rm -f "$txt"
-      else
-        echo "CLEAN $base -> queued Tier-1"
-        echo "$dest" > "$QUEUE/$base.pending"
-      fi
-    elif [ "$rc" -eq 1 ]; then
-      echo "SECRETS $base -> sub-sorting private/"
-      ./sort-docs.sh --stage0 "$dest" "$txt" >/dev/null 2>&1 \
-        || ./safe-move.sh "$dest" "$POOL/private" >/dev/null
-      rm -f "$txt"
-    else
-      echo "UNSCANNED $base (scanner unavailable) -> stays pending-ai"
-      echo "$dest" > "$QUEUE/$base.pending"
+    if [ "$rc" -eq 1 ]; then
+      echo "SECRETS $base -> private/"
+      ./sort-docs.sh --stage0 "$dest" "$txt" >/dev/null 2>&1 || ./safe-move.sh "$dest" "$POOL/private" >/dev/null
+      rm -f "$txt"; continue
     fi
+    # Stage-0 local rules run on EVERY path (clean, or scanner unavailable): offline, instant.
+    rc0=0; ./sort-docs.sh --stage0 "$dest" "$txt" >/dev/null 2>&1 || rc0=$?
+    if [ "$rc0" -eq 0 ]; then echo "PRIVATE-SORTED $base (no queue)"; rm -f "$txt"; continue; fi
+    [ "$rc" -eq 0 ] && echo "CLEAN $base -> queued Tier-1" || echo "UNSCANNED $base (TruffleHog unavailable) -> queued"
+    queue "$dest"
   else
-    # Photos/Videos/Music/Other: text-scan skipped at ingest (CPU OCR on everything is too slow).
-    # Vision screening happens on the Legion via ai-queue.sh — allowed, it's yours.
-    echo "$dest" > "$QUEUE/$base.pending"
-    echo "QUEUED [$type] $base (pending-ai)"
+    # Photos/Videos/Music/Other: vision/audio screening happens on the Legion via ai-queue.sh.
+    queue "$dest"; echo "QUEUED [$type] $base (pending-ai)"
   fi
-done
+done < <(find "$INBOX" -type f -mmin "+$SETTLE_MIN" -printf '%T@ %p\0' | sort -z -n | cut -z -d' ' -f2-)
+
+# Remove sub-folders emptied by the moves (never the inbox itself).
+find "$INBOX" -mindepth 1 -type d -empty -mmin "+$SETTLE_MIN" -delete 2>/dev/null || true

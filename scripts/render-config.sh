@@ -6,7 +6,7 @@ set -euo pipefail
 
 DOMAIN="$(env_get DOMAIN home.lan)"; LAN_IP="$(env_get LAN_IP)"; TLS_MODE="$(env_get TLS_MODE internal)"
 HOST="$(env_get TVBOX_HOSTNAME tvbox)"
-DATA="$REPO_DIR/docker/net/data"
+DATA="${TVBOX_DATA_DIR:-$REPO_DIR/docker/net/data}"
 mkdir -p "$DATA/setup" "$DATA/caddy-data" "$DATA/caddy-config"
 
 # --- Caddy TLS ---------------------------------------------------------------

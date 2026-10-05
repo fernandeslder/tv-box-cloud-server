@@ -6,6 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 POOL="${POOL_ROOT:-/mnt/pool}"
+mkdir -p "$POOL/Music"
 FILE="${1:?usage: sort-music.sh <audio-file>}"
 WHISPER_URL="${WHISPER_URL:-}"
 command -v ffprobe >/dev/null 2>&1 || { echo "sort-music: ffprobe missing" >&2; exit 2; }
@@ -88,10 +89,17 @@ for d in cands:
         best, score = d, s
 print(best if score >= 0.82 else "")
 EOF
-)"
-clean() { echo "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/[[:space:]]\+/ /g'; }
+)" || exit 2   # python failure must not look like exit 1 (= speech)
+# Tags and model output are untrusted: no slashes, no leading dots, no control chars, bounded length.
+# shellcheck disable=SC1003
+clean() {
+  local v
+  v="$(printf '%s' "$1" | tr -d '\000-\037' | tr '/\\' '__' | sed 's/^[[:space:].]*//;s/[[:space:]]*$//;s/[[:space:]]\+/ /g' | cut -c1-80)"
+  case "$v" in ''|.|..) v="Unknown Artist" ;; esac
+  printf '%s' "$v"
+}
 if [ -n "$MATCH" ]; then ARTIST="$MATCH"; else ARTIST="$(clean "$ARTIST")"; fi
-ALBUM="$(clean "$ALBUM")"
+if [ -n "$ALBUM" ]; then ALBUM="$(clean "$ALBUM")"; fi
 dest="$POOL/Music/$ARTIST"
 [ -n "$ALBUM" ] && dest="$dest/$ALBUM"
 target="$(./safe-move.sh "$FILE" "$dest")"

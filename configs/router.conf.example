@@ -1,50 +1,36 @@
-# router.conf — escalation policy. Copy to configs/router.conf and edit. NEVER commit the real one.
-# Priority ladder: FREE local (Tier 0/1) > self-hosted Legion > FREE external (your quotas)
-#   > PAID (last resort, capped). Daily picks in configs/router.managed.conf (price-check.sh).
-# Paid escalation ONLY for: verdict CLEAN + confidence < ROUTER_CONFIDENCE_MIN.
-# SECRET verdicts NEVER route outside. Ever. (Enforced in code, not just policy.)
+# router.conf — escalation policy. Copied to configs/router.conf (mode 600) by setup. NEVER commit the real one.
+#
+# Ladder: local rules -> your Legion (Jev/qwen, unredacted: it is yours) -> EXTERNAL (Command Code
+# Provider API) only for CLEAN verdicts the Legion is unsure about. Everything sent externally is
+# REDACTED first and capped at ~4KB of transcript — never a file. SECRET verdicts never leave.
+#
+# The external step climbs "intelligence tiers" only as far as needed:
+#   jev    typesafe/jev System One decision model (typed, calibrated, cheap)        [if CC_USE_JEV=true]
+#   free   $0 models (laguna, ling, space-bunny)
+#   value  cheap + smart (deepseek, glm, mimo, kimi, muse)
+#   strong bigger models, only if EXTERNAL_MAX_TIER=strong
+# It stops at the first answer with confidence >= ROUTER_CONFIDENCE_MIN.
 
-# Master switch for PAID step. Default off. Free steps run regardless.
-PAID_ENABLED=false
+COMMAND_CODE_API_KEY=
 
-# Below this confidence (0-100), a CLEAN local verdict escalates instead of being accepted.
+# Master switch (still needs a key). Free + jev + value all respect the monthly cap below.
+EXTERNAL_ENABLED=true
+EXTERNAL_MAX_TIER=value          # free | value | strong
+EXTERNAL_MONTHLY_CAP_USD=2.00
 ROUTER_CONFIDENCE_MIN=70
+CC_USE_JEV=true
+CC_ZDR=0                         # 1 = zero data retention (models without a ZDR upstream will 422 and be skipped)
 
-# Hard monthly ceiling (USD). Router refuses paid calls past it; jobs wait as needs-paid.
-PAID_MONTHLY_CAP_USD=2.00
+# Model lists, best-first. price-check.sh drops any id that vanished from the live catalogue.
+CC_FREE_MODELS="poolside/laguna-s-2.1-free inclusionai/ling-3.1-flash:free stealth/space-bunny-alpha"
+CC_VALUE_MODELS="deepseek/deepseek-v4.1-flash z-ai/glm-5.3-flash xiaomi/mimo-v2.5 meta/muse-spark-1.2-contributor moonshotai/Kimi-K3"
+CC_STRONG_MODELS="deepseek/deepseek-v4-pro MiniMaxAI/MiniMax-M3 zai-org/GLM-5.3"
 
-# Cheapest-first paid order (re-sorted daily against prices.json among key-bearing providers).
-PAID_PROVIDER_ORDER="openrouter groq gemini"
+# Booked per call for the monthly cap (rough, per ~1K tokens in / 50 out). Tune from your Command Code usage page.
+CC_EST_JEV=0.0001
+CC_EST_VALUE=0.0005
+CC_EST_STRONG=0.004
 
-# Step 0 — OpenCode free tier via CLI ($0, your quota). Needs on the box, once:
-#   curl -fsSL https://opencode.ai/install | bash   # then: opencode auth login
-# Skipped silently if the CLI is missing/not logged in.
-OPENCODE_ENABLED=true
-OPENCODE_MODEL=opencode/mimo-v2.6-flash-free
-OPENCODE_TIMEOUT=120
-
-# System 1 fallback chain (see jev.sh): Legion engine first, then NanoJev.
-# Point the fallback at a TV-box-local Ollama running NanoJev 0.6B and Tier-1
-# screening survives Legion outages entirely on-premise. Empty = no fallback.
-#   On the TV box (opt-in): curl -fsSL https://ollama.com/install.sh | sh
-#   ollama serve & ollama pull nanojev   # 0.6B, CPU-feasible
+# Legion System-1 fallback (see jev.sh): TV-box-local Ollama running a small decision model.
 JEV_FALLBACK_URL=http://localhost:11434
 JEV_FALLBACK_MODEL=
-
-# Step 1+2 — OpenRouter pipe (one key, free signup). MODEL/FREE_MODEL are
-# machine-managed daily — leave them empty here, price-check.sh fills them in.
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=
-OPENROUTER_FREE_MODEL=
-OPENROUTER_API_KEY=
-
-# Direct-provider fallbacks (own keys, static verified prices — see docs/06).
-GROQ_BASE_URL=https://api.groq.com/openai/v1
-GROQ_MODEL=openai/gpt-oss-20b
-GROQ_API_KEY=
-GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
-GEMINI_MODEL=gemini-2.5-flash-lite
-GEMINI_API_KEY=
-
-# Cost booked per paid escalation call (transcripts truncated to ~4KB by the router).
-PAID_EST_PER_CALL_USD=0.0002

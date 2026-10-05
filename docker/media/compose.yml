@@ -62,7 +62,8 @@ services:
     environment:
       VPN_SERVICE_PROVIDER: ${VPN_PROVIDER:-protonvpn}
       VPN_TYPE: wireguard
-      WIREGUARD_PRIVATE_KEY: ${WG_PRIVATE_KEY:?set WG_PRIVATE_KEY in docker/.env for the torrent profile}
+      # Required for the "torrent" profile (the wizard asks for it).
+      WIREGUARD_PRIVATE_KEY: ${WG_PRIVATE_KEY:-}
       # LAN + Tailscale ranges reachable from behind the tunnel (Caddy lives in the Docker net).
       FIREWALL_OUTBOUND_SUBNETS: ${GLUETUN_SUBNETS:-${LAN_CIDR:-192.168.0.0/24},100.64.0.0/10,172.16.0.0/12}
       DOT: "off"

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # lib.sh — shared helpers. Source it; never run it.
-# Everything is user- and path-agnostic: nothing assumes a user called "htpc"
-# or a checkout in /home/htpc.
+# Everything is user- and path-agnostic: no fixed username, no fixed checkout location.
 set -euo pipefail
 
 TVBOX_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,6 +39,8 @@ TVBOX_HOME="$(getent passwd "$TVBOX_USER" 2>/dev/null | cut -d: -f6 || true)"
 env_get() {  # env_get KEY [default]
   local v
   v="$(grep -E "^$1=" "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
+  v="${v%%[[:space:]]#*}"          # inline comment
+  v="${v%"${v##*[![:space:]]}"}"   # trailing blanks
   v="${v%\"}"; v="${v#\"}"
   printf '%s' "${v:-${2:-}}"
 }

@@ -68,7 +68,8 @@ services:
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
-      TUNNEL_TOKEN: ${CF_TUNNEL_TOKEN:?CF_TUNNEL_TOKEN missing (run scripts/cloudflare.sh)}
+      # Empty unless the "public" profile is on (scripts/cloudflare.sh fills it in).
+      TUNNEL_TOKEN: ${CF_TUNNEL_TOKEN:-}
     depends_on:
       - caddy
 

@@ -21,7 +21,8 @@
 set -euo pipefail
 _JEV_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _JEV_CONF="${ROUTER_CONF:-$_JEV_DIR/../configs/router.conf}"
-[ -f "$_JEV_CONF" ] && set -a && . "$_JEV_CONF" && set +a
+. "$_JEV_DIR/conf-load.sh"
+load_conf "$_JEV_CONF"
 JEV_URL="${JEV_URL:-${LEGION_OLLAMA:-http://localhost:11434}}"
 JEV_MODEL="${JEV_MODEL:-qwen2.5:3b-instruct}"
 JEV_FALLBACK_URL="${JEV_FALLBACK_URL:-http://localhost:11434}"
@@ -39,7 +40,7 @@ try:
                 + json.dumps(schema))
     req = urllib.request.Request(base + "/api/chat",
         json.dumps({"model": model,
-                    "messages": [{"role": "user", "content": grounded[:3000]}],
+                    "messages": [{"role": "user", "content": grounded[:int(os.environ.get("JEV_MAX_PROMPT","7000"))]}],
                     "stream": False, "format": schema,
                     "options": {"temperature": 0}}).encode())
     r = json.load(urllib.request.urlopen(req, timeout=timeout))

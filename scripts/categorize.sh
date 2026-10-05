@@ -26,7 +26,7 @@ EXCERPT="$(head -c 1500 "$CONTENT" 2>/dev/null || true)"
 
 summary_of() {  # $1=item $2=excerpt -> one short line (display only, never parsed for flow)
   { echo "Summarize this personal file in one short line. Name: $1. Content: $2"; } | ./jev.sh fields '{"summary":"string"}' - \
-    2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('summary','')}" 2>/dev/null || true
+    2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('summary',''))" 2>/dev/null || true
 }
 
 fuzzy_dir() {  # $1=root $2=want -> existing dir at ratio>=0.8 else empty

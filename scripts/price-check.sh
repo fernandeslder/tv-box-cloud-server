@@ -1,70 +1,46 @@
 #!/usr/bin/env bash
-# price-check.sh — daily cheapest-model refresh. ~1MB download, nothing else.
-# Ranks OpenRouter's public catalog for our shape (1000 text tokens in / 50 out),
-# picks cheapest paid + best free, writes machine-managed router config.
-# NEVER touches PAID_ENABLED, keys, thresholds, or budget. Safe to run daily.
-# Usage: ./price-check.sh [snapshot.json]   # no arg = download live catalog
+# price-check.sh — daily model-list refresh against the live Command Code catalogue.
+# Drops model ids that no longer exist from each tier, tops tiers up from the catalogue when
+# they run dry, and writes configs/router.managed.conf ATOMICALLY with validated ids only
+# (so the router never sees a malformed or injected value). Never touches keys, caps or switches.
+# Usage: ./price-check.sh [catalog.json]   # no arg = download the live catalogue
 set -euo pipefail
 cd "$(dirname "$0")"
-CONF_DIR="./../configs"
+. ./conf-load.sh
+load_conf ../configs/router.conf.example   # defaults
+load_conf ../configs/router.conf           # your overrides
 SNAP="${1:-}"
-[ -n "$SNAP" ] || { SNAP="$(mktemp)"; trap 'rm -f "$SNAP"' EXIT
-  curl -sf -m 60 --retry 3 https://openrouter.ai/api/v1/models -o "$SNAP"; }
+CONF="${ROUTER_MANAGED:-../configs/router.managed.conf}"
+if [ -z "$SNAP" ]; then
+  SNAP="$(mktemp)"; trap 'rm -f "$SNAP"' EXIT
+  curl -fsS -m 60 --retry 3 "${CC_BASE_URL:-https://api.commandcode.ai/provider/v1}/models" -o "$SNAP" \
+    || { echo "price-check: catalogue unreachable, keeping current picks" >&2; exit 0; }
+fi
 
-python3 - "$SNAP" "$CONF_DIR/prices.json" "$CONF_DIR/router.managed.conf" <<'EOF'
-import json, sys, datetime
-snap_path, prices_path, managed_path = sys.argv[1:4]
-IN_TOK, OUT_TOK, PAID_CAP = 1000, 50, 0.001  # ignore paid picks above $0.001/call
-BLOCK = ("embedding", "moderation", "tts", "audio", "whisper", "image-gen",
-         "guard", "toxic", "nsfw-filter")
-
-def ok(m):
-    i = m.get("id", "").lower()
-    if any(b in i for b in BLOCK):
-        return False
-    if "text" not in (m.get("architecture", {}).get("output_modalities", []) or ["text"]):
-        return False
-    try:
-        float(m["pricing"]["prompt"]); float(m["pricing"]["completion"])
-    except (KeyError, TypeError, ValueError):
-        return False
-    return True
-
-def cost(m):
-    p = m["pricing"]
-    return IN_TOK * float(p["prompt"]) + OUT_TOK * float(p["completion"])
-
-models = [m for m in json.load(open(snap_path)).get("data", []) if ok(m)]
-paid = sorted((m for m in models if cost(m) > 0), key=cost)
-free = [m for m in models if cost(m) == 0]
-free.sort(key=lambda m: (m.get("context_length", 0)), reverse=True)
-
-top_paid = [{"id": m["id"], "per_call_usd": round(cost(m), 6)} for m in paid[:8]]
-cheap_paid = next((m for m in paid if cost(m) <= PAID_CAP), None)
-top_free = [{"id": m["id"], "context": m.get("context_length", 0)} for m in free[:5]]
-PREF = ("qwen", "gemma", "nemotron-3.5-lightning", "mistral", "llama-3", "lfm")
-cands = [m for m in free if "instruct" in m["id"].lower()
-         or "chat" in m["id"].lower() or "-it:" in m["id"].lower()
-         or m["id"].lower().endswith("-it:free")]
-cands.sort(key=lambda m: m.get("context_length", 0), reverse=True)
-free_pick = next((m["id"] for key in PREF for m in cands if key in m["id"].lower()),
-                 cands[0]["id"] if cands else (free[0]["id"] if free else ""))
-
+tmp="$(mktemp "$CONF.XXXXXX")"
+CC_FREE_MODELS="${CC_FREE_MODELS:-}" CC_VALUE_MODELS="${CC_VALUE_MODELS:-}" CC_STRONG_MODELS="${CC_STRONG_MODELS:-}" \
+python3 - "$SNAP" > "$tmp" <<'PY'
+import json, os, re, sys, datetime
+ID = re.compile(r"^[A-Za-z0-9._:/-]+$")
+cat = json.load(open(sys.argv[1])).get("data", [])
+chat = {m["id"]: m for m in cat if ID.match(m.get("id", "")) and "/chat/completions" in m.get("supported_endpoints", [])}
+lists = {k: [x for x in os.environ.get(f"CC_{k}_MODELS", "").split() if ID.match(x)] for k in ("FREE", "VALUE", "STRONG")}
+out = {}
+for k, ids in lists.items():
+    out[k] = [i for i in ids if i in chat]
+# Top up the free tier from the catalogue (free is identifiable by name; never guess paid tiers).
+if len(out["FREE"]) < 2:
+    for i in sorted(chat):
+        if (i.endswith(":free") or "-free" in i or "space-bunny" in i) and i not in out["FREE"]:
+            out["FREE"].append(i)
+        if len(out["FREE"]) >= 3:
+            break
 now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
-prices = {"updated": now, "shape": f"{IN_TOK}in/{OUT_TOK}out",
-          "per_call_usd": {"openrouter": round(cost(cheap_paid), 6) if cheap_paid else 9e9,
-                           "openrouter_free": 0.0,
-                           "groq_direct": 0.00009, "gemini_direct": 0.00012},
-          "top_paid": top_paid, "top_free": top_free}
-json.dump(prices, open(prices_path, "w"), indent=2)
-
-managed = (f"# MANAGED by price-check.sh ({now}). Do not hand-edit — edit router.conf instead.\n"
-           f"OPENROUTER_MODEL={cheap_paid['id'] if cheap_paid else ''}\n"
-           f"OPENROUTER_FREE_MODEL={free_pick}\n")
-open(managed_path, "w").write(managed)
-
-print(f"paid pick: {cheap_paid['id'] if cheap_paid else 'NONE'} "
-      f"(${cost(cheap_paid):.6f}/call)" if cheap_paid else "paid pick: NONE")
-print(f"free pick: {free_pick or 'NONE'}")
-print(f"top paid: {', '.join(m['id'].split('/')[-1][:28] for m in top_paid[:5])}")
-EOF
+print(f"# MANAGED by price-check.sh ({now}). Do not hand-edit: edit router.conf instead.")
+for k in ("FREE", "VALUE", "STRONG"):
+    if out[k]:
+        print(f'CC_{k}_MODELS="{" ".join(out[k])}"')
+sys.stderr.write("free: %s\nvalue: %s\nstrong: %s\n" % tuple(" ".join(out[k]) or "(none)" for k in ("FREE", "VALUE", "STRONG")))
+PY
+chmod 644 "$tmp"; mv -f "$tmp" "$CONF"
+echo "price-check: wrote $CONF"

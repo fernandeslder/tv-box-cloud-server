@@ -12,16 +12,17 @@ for a in "$@"; do case "$a" in --yes) YES=1 ;; --reconfigure) RECONF=1 ;; esac; 
 [ -t 0 ] || YES=1
 [ -n "${TVBOX_NONINTERACTIVE:-}" ] && YES=1
 
-[ -f "$ENV_FILE" ] || { install -m 600 /dev/null "$ENV_FILE"; cp "$REPO_DIR/docker/.env.example" "$ENV_FILE"; chmod 600 "$ENV_FILE"; }
+FRESH=0
+[ -f "$ENV_FILE" ] || { FRESH=1; install -m 600 /dev/null "$ENV_FILE"; cp "$REPO_DIR/docker/.env.example" "$ENV_FILE"; chmod 600 "$ENV_FILE"; }
 chmod 600 "$ENV_FILE"
 
-# Seed file: only fills keys that are still empty/unset.
+# Seed file: on a brand-new env it overrides the example defaults; afterwards it only fills empty keys.
 SEED="${TVBOX_SEED:-${TVBOX_ENV_FILE:-/opt/tvbox-seed.env}}"
 if [ -f "$SEED" ]; then
   while IFS='=' read -r k v; do
     case "$k" in ''|\#*) continue ;; esac
     [[ "$k" =~ ^[A-Z0-9_]+$ ]] || continue
-    [ -z "$(env_get "$k")" ] && env_set "$k" "$v"
+    if [ "$FRESH" -eq 1 ] || [ -z "$(env_get "$k")" ]; then env_set "$k" "$v"; fi
   done < "$SEED"
   ok "applied seed answers from $SEED"
 fi
@@ -52,10 +53,10 @@ net="$(python3 -c 'import ipaddress,sys; print(ipaddress.ip_interface(sys.argv[1
 tz="$(timedatectl show -p Timezone --value 2>/dev/null || echo Europe/London)"
 uid="$(id -u "$TVBOX_USER" 2>/dev/null || echo 1000)"; gid="$(id -g "$TVBOX_USER" 2>/dev/null || echo 1000)"
 
-[ -z "$(env_get TZ)" ] || [ "$(env_get TZ)" = Europe/London ] && env_set TZ "$tz"
+if [ -z "$(env_get TZ)" ] || [ "$(env_get TZ)" = Europe/London ]; then env_set TZ "$tz"; fi
 env_set PUID "$uid"; env_set PGID "$gid"
-env_set VIDEO_GID "$(getent group video | cut -d: -f3 || echo 44)"
-env_set RENDER_GID "$(getent group render | cut -d: -f3 || echo 105)"
+vg="$(getent group video | cut -d: -f3 || true)"; rg="$(getent group render | cut -d: -f3 || true)"
+env_set VIDEO_GID "${vg:-44}"; env_set RENDER_GID "${rg:-105}"
 if [ -z "$(env_get LAN_IP)" ] || [ "$(env_get LAN_IP)" = 192.168.1.10 ]; then env_set LAN_IP "${ip4:-192.168.1.10}"; env_set LAN_CIDR "$net"; fi
 
 echo
