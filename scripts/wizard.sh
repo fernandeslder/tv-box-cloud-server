@@ -22,6 +22,7 @@ if [ -f "$SEED" ]; then
   while IFS='=' read -r k v; do
     case "$k" in ''|\#*) continue ;; esac
     [[ "$k" =~ ^[A-Z0-9_]+$ ]] || continue
+    v="${v%$'\r'}"   # seed edited on Windows
     if [ "$FRESH" -eq 1 ] || [ -z "$(env_get "$k")" ]; then env_set "$k" "$v"; fi
   done < "$SEED"
   ok "applied seed answers from $SEED"
@@ -92,9 +93,15 @@ else
 fi
 
 # ---------------------------------------------------------------- features
+seed_has() { [ -f "$SEED" ] && grep -qE "^$1=" "$SEED"; }
 profiles=()
-if yn "Install the TV desktop (Plasma + Kodi) — is this box plugged into a TV?" y; then env_set TVBOX_DESKTOP yes; else env_set TVBOX_DESKTOP no; fi
+# Unattended with a seed that already says it: the seed wins over the built-in defaults.
+if [ "$YES" -eq 1 ] && [ "$RECONF" -eq 0 ] && seed_has TVBOX_DESKTOP; then :
+elif yn "Install the TV desktop (Plasma + Kodi) — is this box plugged into a TV?" y; then env_set TVBOX_DESKTOP yes; else env_set TVBOX_DESKTOP no; fi
+KEEP_PROFILES=0
+if [ "$YES" -eq 1 ] && [ "$RECONF" -eq 0 ] && seed_has COMPOSE_PROFILES; then KEEP_PROFILES=1; fi
 if yn "Media apps (Jellyfin movies, Navidrome music, Audiobookshelf)?" y; then profiles+=(media); fi
+if yn "Paperless-ngx: archive scans/PDFs with OCR + full-text search (adds ~1GB RAM)?" n; then profiles+=(docs); fi
 if yn "Torrent client behind a VPN kill-switch (needs a VPN account)?" n; then
   profiles+=(torrent)
   hidden=0 ask VPN_PROVIDER "VPN provider (gluetun name, e.g. protonvpn, mullvad)" protonvpn
@@ -103,7 +110,8 @@ fi
 if [ "$(env_get TLS_MODE)" = cloudflare ] && [ -n "$(env_get CF_API_TOKEN)" ]; then
   if yn "Allow public Nextcloud share links + Immich shared albums via a Cloudflare Tunnel (no port forwarding)?" y; then profiles+=(public); fi
 fi
-if [ -n "${profiles[*]:-}" ]; then env_set COMPOSE_PROFILES "$(IFS=,; echo "${profiles[*]}")"; else env_set COMPOSE_PROFILES ""; fi
+if [ "$KEEP_PROFILES" -eq 1 ]; then :
+elif [ -n "${profiles[*]:-}" ]; then env_set COMPOSE_PROFILES "$(IFS=,; echo "${profiles[*]}")"; else env_set COMPOSE_PROFILES ""; fi
 
 # ---------------------------------------------------------------- AI + Tailscale (optional)
 if [ -z "$(env_get COMMAND_CODE_API_KEY)" ] && [ -n "${COMMAND_CODE_API_KEY:-}" ]; then env_set COMMAND_CODE_API_KEY "$COMMAND_CODE_API_KEY"; fi
@@ -117,7 +125,9 @@ if [ "$YES" -eq 0 ] && [ -z "$(env_get TAILSCALE_AUTHKEY)" ]; then
 fi
 
 # ---------------------------------------------------------------- generated secrets
-for s in PIHOLE_PASS IMMICH_DB_PASSWORD NEXTCLOUD_DB_PASSWORD NEXTCLOUD_DB_ROOT_PASSWORD NEXTCLOUD_ADMIN_PASSWORD IMMICH_ADMIN_PASSWORD SMB_PASSWORD; do secret "$s"; done
+for s in PIHOLE_PASS IMMICH_DB_PASSWORD NEXTCLOUD_DB_PASSWORD NEXTCLOUD_DB_ROOT_PASSWORD NEXTCLOUD_ADMIN_PASSWORD IMMICH_ADMIN_PASSWORD SMB_PASSWORD PAPERLESS_ADMIN_PASSWORD; do secret "$s"; done
+secret PAPERLESS_SECRET_KEY 50
+[ -n "$(env_get PAPERLESS_ADMIN_USER)" ] || env_set PAPERLESS_ADMIN_USER admin
 [ -n "$(env_get NEXTCLOUD_ADMIN_USER)" ] || env_set NEXTCLOUD_ADMIN_USER admin
 [ -n "$(env_get IMMICH_VERSION)" ] || env_set IMMICH_VERSION v3.2.4
 env_set IMMICH_ADMIN_EMAIL "$(env_get IMMICH_ADMIN_EMAIL "admin@$DOMAIN")"

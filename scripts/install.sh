@@ -42,7 +42,7 @@ step "Generating configuration"
 install -d "$TVBOX_ETC"
 [ -f "$TVBOX_ETC/restic-password" ] || { openssl rand -base64 32 > "$TVBOX_ETC/restic-password"; chmod 600 "$TVBOX_ETC/restic-password"; }
 "$S/render-config.sh"
-install -m 755 "$S/tvbox" /usr/local/bin/tvbox
+ln -sf "$S/tvbox" /usr/local/bin/tvbox   # symlink: the CLI finds lib.sh next to the real file
 mkdir -p "$REPO_DIR/docker/net/data" "$REPO_DIR/docker/cloud/data"
 chown -R "$TVBOX_USER" "$REPO_DIR/docker/net/homepage" 2>/dev/null || true
 
@@ -51,7 +51,7 @@ for ext in service timer; do
   sed -e "s#@REPO@#$REPO_DIR#g" -e "s#@USER@#$TVBOX_USER#g" -e "s#@POOL@#$POOL#g" "$REPO_DIR/configs/systemd/tvbox-netwatch.$ext" > "/etc/systemd/system/tvbox-netwatch.$ext"
 done
 systemctl daemon-reload
-systemctl enable --now ai-queue.timer price-check.timer ingest.timer ingest.path backup.timer tvbox-netwatch.timer >/dev/null 2>&1 || warn "could not enable some timers"
+systemctl enable --now ai-queue.timer price-check.timer ingest.timer ingest.path backup.timer backup-verify.timer tvbox-smart.timer tvbox-battery.service tvbox-netwatch.timer >/dev/null 2>&1 || warn "could not enable some timers"
 
 if [[ ",$(env_get COMPOSE_PROFILES)," == *,public,* ]]; then
   step "Public sharing (Cloudflare Tunnel)"

@@ -26,7 +26,7 @@ COMMAND_CODE_API_KEY="${COMMAND_CODE_API_KEY:-}"
 _EXTLLM="${EXTLLM:-$_ROUTER_DIR/extllm.py}"
 export COMMAND_CODE_API_KEY CC_ZDR="${CC_ZDR:-0}"
 
-LEDGER_FILE="${LEDGER_FILE:-/var/lib/tvbox/spend.log}"
+LEDGER_FILE="${LEDGER_FILE:-${TVBOX_STATE:-/var/lib/tvbox}/spend.log}"
 { mkdir -p "$(dirname "$LEDGER_FILE")" && touch "$LEDGER_FILE"; } 2>/dev/null \
   || LEDGER_FILE="${AI_QUEUE_DIR:-/tmp}/spend.log"
 

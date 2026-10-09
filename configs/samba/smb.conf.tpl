@@ -55,3 +55,14 @@
    directory mask = 2775
    veto files = /.ai-queue/immich/nextcloud-data/backups-staging/lost+found/
    delete veto files = no
+
+[Paperless]
+   comment = Drop scans and PDFs here: Paperless-ngx OCRs and files them (optional profile)
+   path = @POOL@/paperless/consume
+   valid users = @USER@
+   read only = no
+   browseable = yes
+   force user = @USER@
+   force group = www-data
+   create mask = 0664
+   directory mask = 2775

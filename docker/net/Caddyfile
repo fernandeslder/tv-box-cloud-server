@@ -107,6 +107,12 @@
 		reverse_proxy audiobookshelf:80
 	}
 
+	@docs host docs.{$DOMAIN}
+	handle @docs {
+		respond @tunnel 403
+		reverse_proxy paperless:8000
+	}
+
 	@torrent host torrent.{$DOMAIN}
 	handle @torrent {
 		respond @tunnel 403

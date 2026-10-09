@@ -7,6 +7,7 @@ TVBOX_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${REPO_DIR:-$(cd "$TVBOX_LIB_DIR/.." && pwd)}"
 ENV_FILE="${ENV_FILE:-$REPO_DIR/docker/.env}"
 TVBOX_ETC="${TVBOX_ETC:-/etc/tvbox}"
+TVBOX_STATE="${TVBOX_STATE:-/var/lib/tvbox}"   # spend ledger, last-backup/last-verify stamps, smart-status
 LOG="${TVBOX_LOG:-/var/log/tvbox-install.log}"
 
 _c() { [ -t 2 ] && printf '\033[%sm' "$1" >&2 || true; }
@@ -18,7 +19,7 @@ log() {
 ok()   { _c 32; printf '  ✓ %s\n' "$*" >&2; _c 0; }
 warn() { _c 33; printf '  ! %s\n' "$*" >&2; _c 0; }
 die()  { _c 31; printf '  ✗ %s\n' "$*" >&2; _c 0; exit 1; }
-need_root() { [ "$(id -u)" -eq 0 ] || die "run with sudo: sudo $0 $*"; }
+need_root() { [ "$(id -u)" -eq 0 ] || [ -n "${TVBOX_TEST_NOROOT:-}" ] || die "run with sudo: sudo $0 $*"; }
 apt_install() { DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -53,7 +54,12 @@ env_set() {  # env_set KEY VALUE
   printf '%s=%s\n' "$k" "$v" >> "$tmp"
   cat "$tmp" > "$ENV_FILE"; rm -f "$tmp"
 }
-rand() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "${1:-24}"; }
+# No `tr | head` pipe: under pipefail tr dies of SIGPIPE (status 141) and set -e kills the caller.
+rand() {  # rand [length]
+  local n="${1:-24}" out=""
+  while [ "${#out}" -lt "$n" ]; do out+="$(head -c 256 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9')"; done
+  printf '%s' "${out:0:n}"
+}
 
 # Render a template: replaces @KEY@ with values from the environment.
 render() {  # render <template> <dest> KEY...
@@ -71,3 +77,16 @@ CACHE_ROOT="$(env_get CACHE_ROOT /mnt/cache)"
 HDD_ROOT="${HDD_ROOT:-/mnt/hdd}"
 LANDING_DIR="${LANDING_DIR:-$CACHE_ROOT/landing}"
 DISKS_CONF="${DISKS_CONF:-$TVBOX_ETC/disks.conf}"
+
+# Mountpoint of the first healthy (sentinel-verified) disk with the given role, or nothing.
+disk_mp_for_role() {  # disk_mp_for_role data|backup
+  local uuid role label cand
+  [ -f "$DISKS_CONF" ] || return 0
+  while IFS='|' read -r uuid role label; do
+    [ "$role" = "$1" ] || continue
+    cand="$HDD_ROOT/$label"
+    if mountpoint -q "$cand" 2>/dev/null && [ "$(timeout 5 cat "$cand/.tvbox-disk" 2>/dev/null || true)" = "$uuid" ]; then
+      printf '%s' "$cand"; return 0
+    fi
+  done < <(grep -vE '^\s*(#|$)' "$DISKS_CONF")
+}

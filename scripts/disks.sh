@@ -42,19 +42,34 @@ healthy() {  # healthy <mountpoint> <uuid>
 }
 
 # ---------------------------------------------------------------- scan
-root_disk() {
-  local src; src="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
-  [ -n "$src" ] && lsblk -ndo PKNAME "$src" 2>/dev/null | head -n1 || true
+# Every physical disk the running root filesystem sits on. Walks the whole device chain
+# (btrfs subvolume suffix "[/@]", LVM, LUKS, RAID), so a non-plain-partition root is still found.
+root_disks() {
+  local src
+  src="$(findmnt -n -o SOURCE / 2>/dev/null || true)"; src="${src%%\[*}"
+  [ -n "$src" ] || return 0
+  lsblk -srno NAME,TYPE "$src" 2>/dev/null | awk '$2=="disk"{print $1}' || true
+}
+
+is_system_disk() {  # is_system_disk /dev/sdX|sdX
+  local d; d="$(basename "$1")"
+  root_disks | grep -qx "$d"
+}
+
+# Disks with a mounted filesystem or active swap anywhere are in use: never format/offer them.
+disk_in_use() {  # disk_in_use /dev/sdX
+  lsblk -nro MOUNTPOINTS "$1" 2>/dev/null | grep -q . && return 0
+  return 1
 }
 
 scan() {
-  local rd name size tran model state children fstype
-  rd="$(root_disk)"
+  local name size tran model state children fstype
   printf '%-12s %-8s %-5s %-24s %s\n' DEVICE SIZE BUS MODEL STATE
   lsblk -dnpo NAME,SIZE,TRAN,MODEL,TYPE 2>/dev/null | while read -r name size tran model _; do
     [ -n "$name" ] || continue
     case "$(basename "$name")" in loop*|ram*|zram*|sr*) continue ;; esac
-    if [ "$(basename "$name")" = "$rd" ]; then state="SYSTEM disk (never touched)"
+    if is_system_disk "$name"; then state="SYSTEM disk (never touched)"
+    elif disk_in_use "$name"; then state="in use (mounted; never touched)"
     else
       children="$(lsblk -nro NAME "$name" | tail -n +2 | wc -l)"
       fstype="$(lsblk -ndo FSTYPE "$name" | head -n1)"
@@ -79,7 +94,7 @@ add() {
   done
   [ -b "$dev" ] || die "usage: disks.sh add /dev/sdX data|backup [label] [--yes] [--force]"
   [ -n "$role" ] || die "role must be 'data' or 'backup'"
-  [ "$(basename "$dev")" != "$(root_disk)" ] || die "$dev is the system disk — refusing"
+  is_system_disk "$dev" && die "$dev is the system disk — refusing (even with --force)"
   if lsblk -nro MOUNTPOINT "$dev" | grep -q .; then die "$dev has mounted partitions — unmount first"; fi
   [ -n "$label" ] || label="$role$(($(conf_lines | awk -F'|' -v r="$role" '$2==r' | wc -l) + 1))"
   local blank=0 children fstype

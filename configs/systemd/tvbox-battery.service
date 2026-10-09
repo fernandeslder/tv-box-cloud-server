@@ -1,0 +1,11 @@
+[Unit]
+Description=TV box: cap battery charge (laptop chassis on mains 24/7)
+ConditionPathExists=/sys/class/power_supply
+
+[Service]
+Type=oneshot
+ExecStart=@REPO@/scripts/battery-care.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

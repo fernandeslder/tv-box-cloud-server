@@ -8,10 +8,7 @@
 set -euo pipefail
 . "$(cd "$(dirname "$0")/../scripts" && pwd)/lib.sh"
 need_root
-mp=""
-while IFS='|' read -r _ role label; do
-  [ "$role" = backup ] && [ -d "$HDD_ROOT/$label/restic" ] && mp="$HDD_ROOT/$label"
-done < <(grep -vE '^\s*(#|$)' "$DISKS_CONF" 2>/dev/null || true)
+mp="$(disk_mp_for_role backup)"
 REPO="${RESTIC_REPO:-${mp:+$mp/restic}}"
 [ -n "${REPO:-}" ] || die "backup disk not found/mounted (sudo tvbox disks sync)"
 export RESTIC_PASSWORD_FILE="${RESTIC_PASSWORD_FILE:-$TVBOX_ETC/restic-password}"

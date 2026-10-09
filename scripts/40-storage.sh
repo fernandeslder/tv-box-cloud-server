@@ -19,7 +19,7 @@ register_disks() {
   if [ -n "$plan" ]; then
     for item in ${plan//,/ }; do
       dev="${item%%:*}"; role="${item##*:}"
-      "$REPO_DIR/scripts/disks.sh" add "$dev" "$role" --yes
+      "$REPO_DIR/scripts/disks.sh" add "$dev" "$role" --yes || warn "could not add $dev ($role): continuing without it"
     done
     return
   fi
@@ -44,7 +44,9 @@ register_disks() {
   printf '\nThis ERASES the disks above. Type ERASE to continue, or Enter to skip: '
   read -r ans
   if [ "$ans" != ERASE ]; then warn "skipped — running SSD-only. Re-run setup when ready."; return 0; fi
-  for item in $plan; do "$REPO_DIR/scripts/disks.sh" add "${item%%:*}" "${item##*:}" --yes; done
+  for item in $plan; do
+    "$REPO_DIR/scripts/disks.sh" add "${item%%:*}" "${item##*:}" --yes || warn "could not add ${item%%:*}: continuing without it"
+  done
 }
 
 register_disks
@@ -53,20 +55,22 @@ register_disks
 # Folder skeleton. Shared group www-data (gid 33) = Nextcloud's group inside its container,
 # so Samba, ingest, Immich-import and Nextcloud all read/write the same files.
 if mountpoint -q "$STORAGE_ROOT"; then
-  for d in inbox Photos Documents Music Recordings Videos Other private duplicates immich nextcloud-data media media/audiobooks media/podcasts media/downloads backups-staging .ai-queue; do
+  for d in inbox Photos Documents Music Recordings Videos Other private duplicates immich nextcloud-data media media/audiobooks media/podcasts media/downloads backups-staging .ai-queue paperless/consume paperless/media paperless/export; do
     mkdir -p "$STORAGE_ROOT/$d"
   done
   chown "$TVBOX_USER:www-data" "$STORAGE_ROOT"/{inbox,Photos,Documents,Music,Recordings,Videos,Other,private,duplicates,media,.ai-queue}
   chmod 2775 "$STORAGE_ROOT"/{inbox,Photos,Documents,Music,Recordings,Videos,Other,duplicates,media,.ai-queue}
   chmod 2770 "$STORAGE_ROOT/private"
   chown 33:33 "$STORAGE_ROOT/nextcloud-data"; chmod 750 "$STORAGE_ROOT/nextcloud-data"
+  chown -R "$TVBOX_USER:www-data" "$STORAGE_ROOT/paperless"; chmod -R g+rwX "$STORAGE_ROOT/paperless"
   chown root:root "$STORAGE_ROOT/immich" "$STORAGE_ROOT/backups-staging"
 else
   die "pool did not mount at $STORAGE_ROOT — check: sudo ./scripts/disks.sh status"
 fi
 
 # Cache-side dirs for containers (databases etc. live here, never on the HDDs).
-mkdir -p "$CACHE_ROOT"/{immich-pg,immich-thumbs,immich-encoded,nextcloud-db,redis,jellyfin-transcode,db-dumps}
+mkdir -p "$CACHE_ROOT"/{immich-pg,immich-thumbs,immich-encoded,nextcloud-db,redis,jellyfin-transcode,db-dumps,paperless-data}
+chown "$TVBOX_USER" "$CACHE_ROOT/paperless-data"
 
 # Units: render @REPO@/@USER@/@POOL@ and enable.
 POOL="$STORAGE_ROOT"; USER_="$TVBOX_USER"; REPO="$REPO_DIR"

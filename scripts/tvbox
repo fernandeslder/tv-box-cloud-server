@@ -3,7 +3,12 @@
 set -euo pipefail
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 S="$(cd "$(dirname "$SELF")" && pwd)"
-if [ ! -f "$S/lib.sh" ]; then S="$(dirname "$(readlink -f /usr/local/bin/tvbox)")"; fi
+if [ ! -f "$S/lib.sh" ]; then
+  for c in "$(dirname "$(readlink -f /usr/local/bin/tvbox 2>/dev/null || true)")" /opt/tvbox/scripts; do
+    [ -f "$c/lib.sh" ] && { S="$c"; break; }
+  done
+fi
+[ -f "$S/lib.sh" ] || { echo "tvbox: cannot find the repo's scripts/lib.sh (re-run: sudo /opt/tvbox/setup.sh)" >&2; exit 1; }
 . "$S/lib.sh"
 DC=(docker compose --project-directory "$REPO_DIR/docker" -f "$REPO_DIR/docker/compose.yml" --env-file "$ENV_FILE")
 sudo_() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi; }
@@ -39,7 +44,14 @@ cmd_doctor() {
     [ -z "$st" ] || [ "$st" = running ] || { warn "container $s is $st"; bad=1; }
   done
   chk "Tailscale connected" tailscale status || true
-  chk "last backup < 3 days old" bash -c "find /var/lib/tvbox/last-backup -mtime -3 2>/dev/null | grep -q ." || { warn "no recent backup (is the backup disk attached?)"; bad=1; }
+  chk "last backup < 3 days old" bash -c "find '$TVBOX_STATE/last-backup' -mtime -3 2>/dev/null | grep -q ." || { warn "no recent backup (is the backup disk attached?)"; bad=1; }
+  # A restore test that has never run (fresh box) is not a problem yet; one that is overdue is.
+  if [ -e "$TVBOX_STATE/last-verify" ]; then
+    chk "last restore test < 10 days old" bash -c "find '$TVBOX_STATE/last-verify' -mtime -10 2>/dev/null | grep -q ." || { warn "backup restore test is overdue: sudo tvbox verify-backup"; bad=1; }
+  fi
+  if [ -s "$TVBOX_STATE/smart-status" ] && grep -q '|FAILED|' "$TVBOX_STATE/smart-status"; then
+    warn "SMART reports a failing disk: tvbox smart"; bad=1
+  fi
   [ "$bad" -eq 0 ] && echo "All good." || { echo "Problems found (above)."; return 1; }
 }
 cmd_update_ip() {
@@ -60,6 +72,7 @@ cmd_update_ip() {
   "$S/notify.sh" warn "LAN IP changed to $new. Set the router's DNS to $new and reserve this IP." || true
 }
 cmd_backup() { sudo_ "$REPO_DIR/backups/backup.sh" "$@"; }
+cmd_smart() { sudo_ "$S/smart-check.sh"; }
 cmd_logs() { "${DC[@]}" logs -f --tail=100 "$@"; }
 cmd_update() {
   git -C "$REPO_DIR" pull --ff-only
@@ -80,6 +93,8 @@ case "${1:-help}" in
   restore) shift; sudo_ "$REPO_DIR/backups/restore.sh" "$@" ;;
   disks) shift; sudo_ "$S/disks.sh" "${@:-status}" ;;
   mover) sudo_ "$S/mover.sh" ;;
+  smart) cmd_smart ;;
+  verify-backup) sudo_ "$REPO_DIR/backups/verify.sh" ;;
   update-ip) shift; cmd_update_ip "$@" ;;
   post-install) sudo_ "$S/post-install.sh" ;;
   creds) cat "$TVBOX_HOME/tvbox-credentials.txt" ;;
@@ -95,6 +110,8 @@ tvbox <command>
   restore       restore from the backup disk (see docs/08)
   disks [scan|add|sync|status]   USB disk management
   mover         flush the SSD cache to the HDDs now
+  smart         SMART health of every disk (also runs daily)
+  verify-backup restore a sample from the backup and compare it with the live files
   update-ip     re-point DNS/Tailscale after the LAN IP changed
   creds         show where your generated passwords are
   setup         re-run the installer / wizard (--reconfigure)

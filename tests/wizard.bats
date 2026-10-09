@@ -23,3 +23,21 @@ teardown() { rm -rf "$T"; }
   printf 'DOMAIN=example.org\nCF_API_TOKEN=tok\n' > "$T/seed"; TVBOX_SEED="$T/seed" "$REPO/scripts/wizard.sh" --yes
   grep -q '^TLS_MODE=cloudflare' "$ENV_FILE"
 }
+@test "unattended: a seed's COMPOSE_PROFILES and TVBOX_DESKTOP are kept, not overwritten by defaults" {
+  printf 'COMPOSE_PROFILES=media,docs\nTVBOX_DESKTOP=no\n' > "$T/seed"; TVBOX_SEED="$T/seed" "$REPO/scripts/wizard.sh" --yes
+  grep -q '^COMPOSE_PROFILES=media,docs$' "$ENV_FILE"; grep -q '^TVBOX_DESKTOP=no$' "$ENV_FILE"
+}
+@test "Paperless secrets are generated (key is 50 chars) and the docs profile is off by default" {
+  "$REPO/scripts/wizard.sh" --yes
+  k="$(grep ^PAPERLESS_SECRET_KEY= "$ENV_FILE" | cut -d= -f2-)"; [ "${#k}" -eq 50 ]
+  [ -n "$(grep ^PAPERLESS_ADMIN_PASSWORD= "$ENV_FILE" | cut -d= -f2-)" ]
+  ! grep -q '^COMPOSE_PROFILES=.*docs' "$ENV_FILE"
+}
+@test "a seed with Windows (CRLF) line endings is read correctly" {
+  printf 'DOMAIN=example.org\r\nTVBOX_HOSTNAME=winbox\r\n' > "$T/seed"; TVBOX_SEED="$T/seed" "$REPO/scripts/wizard.sh" --yes
+  [ "$(grep ^TVBOX_HOSTNAME= "$ENV_FILE")" = "TVBOX_HOSTNAME=winbox" ]
+}
+@test "rand() survives set -euo pipefail and returns the requested length" {
+  run bash -c "set -euo pipefail; . '$REPO/scripts/lib.sh'; x=\"\$(rand 37)\"; echo \${#x}"
+  [ "$status" -eq 0 ]; [ "$output" = 37 ]
+}

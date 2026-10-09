@@ -7,6 +7,10 @@
         href: https://files.{{HOMEPAGE_VAR_DOMAIN}}
         description: Documents, sync, sharing
         icon: nextcloud
+    - Documents (Paperless):
+        href: https://docs.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Scans and PDFs, OCR + full-text search (optional)
+        icon: paperless-ngx
     - Setup your devices:
         href: https://setup.{{HOMEPAGE_VAR_DOMAIN}}
         description: Phone apps, QR codes, network shares

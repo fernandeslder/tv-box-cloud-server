@@ -1,0 +1,11 @@
+[Unit]
+Description=TV box: SMART health check of the USB disks and the SSD
+After=tvbox-storage.service
+
+[Service]
+Type=oneshot
+ExecStart=@REPO@/scripts/smart-check.sh
+Nice=10
+IOSchedulingClass=idle
+# A failing disk is reported (notification), not a failed unit.
+SuccessExitStatus=0 1

@@ -30,3 +30,36 @@ F
   ! grep -q CCCC "$DISKS_CONF"; ! grep -q DDDD "$DISKS_CONF"
   PATH="$T/bin:$PATH" run bash -c ". '$T/s/disks-lib.sh'; adopt"; [ "$(grep -c AAAA "$DISKS_CONF")" -eq 1 ]
 }
+@test "a btrfs-subvolume root ('/dev/nvme0n1p2[/@]') is still recognised as the system disk" {
+  mkdir -p "$T/bin"
+  cat > "$T/bin/findmnt" <<'F'
+#!/bin/sh
+echo '/dev/nvme0n1p2[/@]'
+F
+  cat > "$T/bin/lsblk" <<'F'
+#!/bin/sh
+case "$*" in
+  *-srno*) printf 'nvme0n1p2 part\nnvme0n1 disk\n' ;;
+  *-dnpo*) printf '/dev/nvme0n1 953.9G nvme SAMSUNG disk\n' ;;
+  *) : ;;
+esac
+F
+  chmod +x "$T/bin/findmnt" "$T/bin/lsblk"
+  PATH="$T/bin:$PATH" run "$REPO/scripts/disks.sh" scan
+  [[ "$output" == *"SYSTEM disk"* ]]
+}
+@test "add refuses the system disk even with --force" {
+  mkdir -p "$T/bin"
+  cat > "$T/bin/findmnt" <<'F'
+#!/bin/sh
+echo '/dev/loop0'
+F
+  cat > "$T/bin/lsblk" <<'F'
+#!/bin/sh
+printf 'loop0 loop\nloop0 disk\n'
+F
+  chmod +x "$T/bin/findmnt" "$T/bin/lsblk"
+  # /dev/loop0 is a real block node on most systems; if absent the test degrades to the 'not a block device' refusal.
+  PATH="$T/bin:$PATH" TVBOX_DRY_RUN=1 run "$REPO/scripts/disks.sh" add /dev/loop0 data --force --yes
+  [ "$status" -ne 0 ]
+}

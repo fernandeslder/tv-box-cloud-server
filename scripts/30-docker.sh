@@ -7,6 +7,12 @@ if ! have docker; then
   case "${ID_LIKE:-$ID} $ID" in *ubuntu*|*linuxmint*) dist=ubuntu; code="${UBUNTU_CODENAME:-$VERSION_CODENAME}" ;;
                                  *debian*) dist=debian; code="$VERSION_CODENAME" ;;
                                  *) die "unsupported distro $ID (need Ubuntu/Debian/Mint)" ;; esac
+  # A brand-new release may not be in Docker's repo yet: fall back to the previous LTS codename.
+  if ! curl -fsI -m 20 "https://download.docker.com/linux/$dist/dists/$code/Release" >/dev/null 2>&1; then
+    fallback=noble; [ "$dist" = debian ] && fallback=bookworm
+    warn "Docker has no repo for '$code' yet: using '$fallback'"
+    code="$fallback"
+  fi
   install -m 0755 -d /etc/apt/keyrings
   curl -fsSL -m 60 --retry 3 "https://download.docker.com/linux/$dist/gpg" -o /etc/apt/keyrings/docker.asc
   chmod a+r /etc/apt/keyrings/docker.asc

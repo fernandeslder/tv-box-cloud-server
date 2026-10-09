@@ -6,7 +6,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt_install ca-certificates curl git jq rsync file attr parted e2fsprogs util-linux \
   smartmontools restic rclone mergerfs samba avahi-daemon qrencode ufw htop \
-  python3 tesseract-ocr poppler-utils ffmpeg openssl
+  python3 tesseract-ocr poppler-utils ffmpeg openssl unzip binutils bind9-dnsutils iproute2
 apt_install wsdd2 2>/dev/null || apt_install wsdd 2>/dev/null || warn "wsdd not available: Windows may need \\\\tvbox typed manually"
 
 if [ "$(env_get TVBOX_DESKTOP yes)" = yes ]; then

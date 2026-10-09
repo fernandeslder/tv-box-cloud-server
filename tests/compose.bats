@@ -19,7 +19,7 @@ E
 teardown() { rm -rf "$T"; }
 @test "compose config is valid with default profiles" { cd "$REPO/docker"; "${DC[@]}" --env-file "$T/env" config --quiet; }
 @test "compose config is valid with every profile on" {
-  cd "$REPO/docker"; printf 'COMPOSE_PROFILES=media,torrent,public,agent\nWG_PRIVATE_KEY=k\nCF_TUNNEL_TOKEN=t\n' >> "$T/env"
+  cd "$REPO/docker"; printf 'COMPOSE_PROFILES=media,docs,torrent,public,agent\nWG_PRIVATE_KEY=k\nCF_TUNNEL_TOKEN=t\n' >> "$T/env"
   "${DC[@]}" --env-file "$T/env" config --quiet
 }
 @test "missing secrets fail loudly instead of starting with blanks" {

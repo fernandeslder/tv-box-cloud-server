@@ -17,16 +17,9 @@ NOTIFY="$REPO_DIR/scripts/notify.sh"
 fail() { "$NOTIFY" error "backup FAILED: $*" || true; die "$*"; }
 
 # ---- find the backup disk (role=backup, healthy) -----------------------------
-mp=""
-if [ -f "$DISKS_CONF" ]; then
-  while IFS='|' read -r uuid role label; do
-    [ "$role" = backup ] || continue
-    cand="$HDD_ROOT/$label"
-    if mountpoint -q "$cand" && [ "$(timeout 5 cat "$cand/.tvbox-disk" 2>/dev/null || true)" = "$uuid" ]; then mp="$cand"; break; fi
-  done < <(grep -vE '^\s*(#|$)' "$DISKS_CONF")
-fi
-[ -n "$mp" ] || fail "no backup disk online. Plug it in (tvbox disks status) or register one: sudo scripts/disks.sh add /dev/sdX backup"
-REPO="${RESTIC_REPO:-$mp/restic}"
+mp="$(disk_mp_for_role backup)"
+[ -n "$mp" ] || [ -n "${RESTIC_REPO:-}" ] || fail "no backup disk online. Plug it in (tvbox disks status) or register one: sudo scripts/disks.sh add /dev/sdX backup"
+REPO="${RESTIC_REPO:-$mp/restic}"; mkdir -p "$(dirname "$REPO")"
 export RESTIC_PASSWORD_FILE="${RESTIC_PASSWORD_FILE:-$TVBOX_ETC/restic-password}"
 [ -s "$RESTIC_PASSWORD_FILE" ] || fail "missing restic password file $RESTIC_PASSWORD_FILE"
 restic -r "$REPO" cat config >/dev/null 2>&1 || restic -r "$REPO" init >/dev/null
@@ -43,6 +36,10 @@ if dc ps --status running nextcloud-db 2>/dev/null | grep -q nextcloud-db; then
   dc exec -T -e MYSQL_PWD="$(env_get NEXTCLOUD_DB_ROOT_PASSWORD)" nextcloud-db mariadb-dump -u root --single-transaction nextcloud \
     | gzip > "$DUMPS/nextcloud.sql.gz.tmp" && mv "$DUMPS/nextcloud.sql.gz.tmp" "$DUMPS/nextcloud.sql.gz" || fail "Nextcloud DB dump failed"
 else echo "backup: nextcloud-db not running, skipping its dump" >&2; fi
+# Paperless-ngx: its documented exporter writes originals + metadata, restorable by `document_importer`.
+if dc ps --status running paperless 2>/dev/null | grep -q paperless; then
+  dc exec -T paperless document_exporter ../export -c -d >/dev/null 2>&1 || echo "backup: Paperless export failed (originals are still on the pool)" >&2
+fi
 # Pi-hole v6 Teleporter export (settings, lists, local DNS).
 ph_ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(dc ps -q pihole 2>/dev/null | head -n1)" 2>/dev/null || true)"
 if [ -n "$ph_ip" ]; then
@@ -58,23 +55,33 @@ fi
 cp -a /var/lib/samba/private/passdb.tdb "$DUMPS/samba-passdb.tdb" 2>/dev/null || true
 
 # ---- what to back up ----------------------------------------------------------
-INCLUDE="${BACKUP_INCLUDE:-$(env_get BACKUP_INCLUDE "Photos Documents private Recordings Other immich nextcloud-data")}"
-paths=("$DUMPS" "/var/lib/tvbox" "$ENV_FILE" "$REPO_DIR/configs/router.conf" "$TVBOX_ETC" "$REPO_DIR/docker/net/data" "$REPO_DIR/docker/cloud/data")
+INCLUDE="${BACKUP_INCLUDE:-$(env_get BACKUP_INCLUDE "Photos Documents private Recordings Other immich nextcloud-data paperless")}"
+paths=("$DUMPS" "$TVBOX_STATE" "$ENV_FILE" "$REPO_DIR/configs/router.conf" "$TVBOX_ETC" "$REPO_DIR/docker/net/data" "$REPO_DIR/docker/cloud/data")
 need=0
 for d in $INCLUDE; do
   [ -e "$STORAGE_ROOT/$d" ] || continue
   paths+=("$STORAGE_ROOT/$d")
-  need=$((need + $(du -sb "$STORAGE_ROOT/$d" 2>/dev/null | cut -f1)))
+  sz="$(du -sb "$STORAGE_ROOT/$d" 2>/dev/null | cut -f1 || true)"
+  need=$((need + ${sz:-0}))
 done
-free="$(df -B1 --output=avail "$mp" | tail -n1 | tr -dc '0-9')"
+free="$(df -B1 --output=avail "${mp:-$(dirname "$REPO")}" | tail -n1 | tr -dc '0-9')"
 if [ "$need" -gt "$((free * 9 / 10))" ]; then
   "$NOTIFY" warn "backup disk may be too small: data to back up $((need / 1073741824))GB, free $((free / 1073741824))GB. Trim BACKUP_INCLUDE in docker/.env." || true
 fi
 
+# Only existing paths: restic exits non-zero for a missing source, and a fresh box lacks some of them.
+existing=()
+for p in "${paths[@]}"; do [ -e "$p" ] && existing+=("$p"); done
+rc=0
 restic -r "$REPO" backup --tag nightly --exclude '**/thumbs' --exclude '**/encoded-video' --exclude '**/.ai-queue' --exclude "$TVBOX_ETC/restic-password" \
-  --exclude "$REPO_DIR/docker/net/data/caddy-config" "${paths[@]}" || fail "restic backup failed (is the backup disk full?)"
+  --exclude "$REPO_DIR/docker/net/data/caddy-config" "${existing[@]}" || rc=$?
+case "$rc" in
+  0) ;;
+  3) "$NOTIFY" warn "backup finished but some files could not be read (open or vanished files)" || true ;;  # snapshot IS written
+  *) fail "restic backup failed (exit $rc; is the backup disk full?)" ;;
+esac
 restic -r "$REPO" forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune || fail "restic prune failed"
 restic -r "$REPO" check --read-data-subset=2% || fail "restic check found a problem"
 
-install -d /var/lib/tvbox; date -Is > /var/lib/tvbox/last-backup
+install -d "$TVBOX_STATE"; date -Is > "$TVBOX_STATE/last-backup"
 echo "backup: OK $(date -Is) -> $REPO"
