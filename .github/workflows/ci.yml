@@ -2,6 +2,9 @@ name: ci
 on:
   push:
   pull_request:
+  schedule:
+    - cron: "17 6 * * 1"        # weekly: do the pinned container images still exist?
+  workflow_dispatch:
 jobs:
   check:
     runs-on: ubuntu-24.04
@@ -10,10 +13,19 @@ jobs:
       - name: Tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq shellcheck bats zip unzip poppler-utils tesseract-ocr
+          sudo apt-get install -y -qq shellcheck bats zip unzip poppler-utils tesseract-ocr restic xorriso libarchive-tools
           curl -fsSL -o caddy.tgz https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_linux_amd64.tar.gz
           sudo tar -xzf caddy.tgz -C /usr/local/bin caddy
           curl -fsSL -o /tmp/dc https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64
           sudo install -m 755 /tmp/dc /usr/local/bin/docker-compose
-      - name: Unit + config tests (shellcheck, compose config, Caddy, mover, router, wizard, cloudflare mock...)
+      - name: Unit + config tests (shellcheck, compose config, Caddy, mover, backup+restore test, SMART, USB builder, wizard, cloudflare mock...)
         run: bats tests
+
+  images:
+    # Online check that every pinned image tag still exists (a missing tag only shows up on the box).
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve every image reference against its registry
+        run: scripts/check-images.py

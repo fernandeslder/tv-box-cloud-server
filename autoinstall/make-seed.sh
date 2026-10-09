@@ -12,6 +12,8 @@ WIFI_SSID=""
 PASS_HASH=""
 ENV_FILE=""
 KEYBOARD="us"
+TIMEZONE=""
+PASS_HASH_FILE=""
 BUILD_ISO=1
 
 usage() {
@@ -20,6 +22,8 @@ Usage: $0 [options]   (anything not given is asked interactively)
   --user NAME            login user on the box
   --ssh-key-file FILE    public key(s), e.g. ~/.ssh/id_ed25519.pub (required: SSH is key-only)
   --wifi-ssid SSID       enable Wi-Fi; password asked, or set TVBOX_WIFI_PASS
+  --password-hash-file F file whose first line is a sha-512 hash (e.g. from: mkpasswd -m sha-512 > F)
+  --timezone ZONE        IANA zone, e.g. America/Moncton (default: this computer's zone)
   --password-hash HASH   ready-made sha-512 hash; otherwise the password is asked
                          (or set TVBOX_PASSWORD) and hashed locally
   --env-file FILE        pre-filled docker/.env, copied to the seed as tvbox-seed.env
@@ -39,6 +43,8 @@ while [ "$#" -gt 0 ]; do
     --ssh-key-file) need_arg "$@"; KEY_FILE=$2; shift 2 ;;
     --wifi-ssid) need_arg "$@"; WIFI_SSID=$2; shift 2 ;;
     --password-hash) need_arg "$@"; PASS_HASH=$2; shift 2 ;;
+    --password-hash-file) need_arg "$@"; PASS_HASH_FILE=$2; shift 2 ;;
+    --timezone) need_arg "$@"; TIMEZONE=$2; shift 2 ;;
     --env-file) need_arg "$@"; ENV_FILE=$2; shift 2 ;;
     --keyboard) need_arg "$@"; KEYBOARD=$2; shift 2 ;;
     --out) need_arg "$@"; OUT=$2; shift 2 ;;
@@ -87,6 +93,16 @@ hash_password() {
   fi
 }
 
+if [ -z "$PASS_HASH" ] && [ -n "$PASS_HASH_FILE" ]; then
+  [ -r "$PASS_HASH_FILE" ] || die "cannot read password hash file: $PASS_HASH_FILE"
+  PASS_HASH=$(head -n1 "$PASS_HASH_FILE" | tr -d '\r\n')
+fi
+if [ -z "$TIMEZONE" ]; then
+  TIMEZONE=$(timedatectl show -p Timezone --value 2>/dev/null || true)
+  [ -n "$TIMEZONE" ] || TIMEZONE=$(readlink /etc/localtime 2>/dev/null | sed 's#.*/zoneinfo/##' || true)
+  [ -n "$TIMEZONE" ] || TIMEZONE=UTC
+fi
+[[ $TIMEZONE =~ ^[A-Za-z0-9_+/-]+$ ]] || die "invalid timezone: $TIMEZONE"
 if [ -z "$PASS_HASH" ]; then
   PW=${TVBOX_PASSWORD:-}
   if [ -z "$PW" ]; then
@@ -119,7 +135,7 @@ mkdir -p "$OUT"
 chmod 700 "$OUT"
 rm -f "$OUT/user-data" "$OUT/meta-data" "$OUT/tvbox-seed.env"
 
-V_USERNAME=$(q "$USERNAME_") V_HASH=$(q "$PASS_HASH") V_KEYS=$KEYS V_KBD=$(q "$KEYBOARD") \
+V_USERNAME=$(q "$USERNAME_") V_HASH=$(q "$PASS_HASH") V_KEYS=$KEYS V_KBD=$(q "$KEYBOARD") V_TZ=$(q "$TIMEZONE") \
 V_WSSID=$(q "$WIFI_SSID") V_WPASS=$(q "$WIFI_PASS") V_WIFI=$([ -n "$WIFI_SSID" ] && echo 1 || echo 0) \
 awk '
 function rep(s, key, val,   i, o) {
@@ -137,6 +153,7 @@ function rep(s, key, val,   i, o) {
   line = rep(line, "@@USERNAME@@", ENVIRON["V_USERNAME"])
   line = rep(line, "@@PASSWORD_HASH@@", ENVIRON["V_HASH"])
   line = rep(line, "@@KEYBOARD@@", ENVIRON["V_KBD"])
+  line = rep(line, "@@TIMEZONE@@", ENVIRON["V_TZ"])
   if (index(line, "@@SSH_KEY@@") > 0) {
     n = split(ENVIRON["V_KEYS"], k, "\n")
     for (j = 1; j <= n; j++) print rep(line, "@@SSH_KEY@@", k[j])

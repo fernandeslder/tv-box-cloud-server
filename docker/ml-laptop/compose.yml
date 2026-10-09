@@ -41,7 +41,7 @@ services:
   # native Ollama app instead (same models, same env vars) and skip this.
   ollama:
     profiles: ["ollama"]
-    image: ollama/ollama:cuda
+    image: ollama/ollama:0.40.2   # the default image already ships CUDA support ("cuda" tag does not exist)
     restart: unless-stopped
     ports:
       - "0.0.0.0:11434:11434"

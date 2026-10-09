@@ -10,7 +10,9 @@ apt_install ca-certificates curl git jq rsync file attr parted e2fsprogs util-li
 apt_install wsdd2 2>/dev/null || apt_install wsdd 2>/dev/null || warn "wsdd not available: Windows may need \\\\tvbox typed manually"
 
 if [ "$(env_get TVBOX_DESKTOP yes)" = yes ]; then
-  apt_install mesa-va-drivers mesa-vulkan-drivers vainfo libva2 || true
+  # Video acceleration for the Ryzen/Vega iGPU. `mesa-va-drivers` was folded into mesa-libgallium
+  # on newer releases, so every name is optional and installed on its own.
+  apt_install_optional mesa-va-drivers mesa-libgallium mesa-vulkan-drivers vainfo libva2 libva-drm2
 fi
 
 # Always-on server: never sleep, ignore the lid (this may be a laptop chassis).

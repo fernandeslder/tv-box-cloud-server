@@ -16,6 +16,7 @@ autoinstall:
     - storage
 
   locale: en_US.UTF-8
+  timezone: '@@TIMEZONE@@'
   keyboard:
     layout: '@@KEYBOARD@@'
 
@@ -69,6 +70,8 @@ autoinstall:
 
   late-commands:
     # 1. First-boot script (runs the repo bootstrap once, then disables itself).
+    #    Prefers the repo bundle copied from the installer USB (pinned commit, works when GitHub
+    #    is unreachable) and falls back to downloading bootstrap.sh from GitHub.
     - |
       cat > /target/usr/local/sbin/tvbox-firstboot.sh <<'SCRIPT'
       #!/bin/bash
@@ -76,6 +79,7 @@ autoinstall:
       LOG=/var/log/tvbox-firstboot.log
       MARKER=/var/lib/tvbox-firstboot.done
       SEED_ENV=/opt/tvbox-seed.env
+      BUNDLE=/opt/tvbox.bundle
       BOOTSTRAP_URL=https://raw.githubusercontent.com/fernandeslder/tv-box-cloud-server/master/bootstrap.sh
 
       exec >>"$LOG" 2>&1
@@ -84,21 +88,29 @@ autoinstall:
 
       # network-online can fire before DHCP/Wi-Fi really works: probe for up to 10 min
       for _ in $(seq 1 60); do
-        curl -fsI --max-time 10 https://raw.githubusercontent.com >/dev/null && break
+        curl -fsI --max-time 10 https://download.docker.com >/dev/null && break
         echo "$(date -Is) waiting for internet..."
         sleep 10
       done
 
-      tmp=$(mktemp)
-      if ! curl -fsSL --retry 5 --retry-delay 10 "$BOOTSTRAP_URL" -o "$tmp"; then
-        echo "$(date -Is) could not download bootstrap.sh; will retry on next boot"
-        exit 1
-      fi
-
       export TVBOX_NONINTERACTIVE=1 DEBIAN_FRONTEND=noninteractive
       [ -f "$SEED_ENV" ] && export TVBOX_ENV_FILE="$SEED_ENV"
 
-      if bash "$tmp"; then
+      if [ -f "$BUNDLE" ]; then
+        echo "using the repo bundle from the installer USB ($(git bundle list-heads "$BUNDLE" 2>/dev/null | head -n1))"
+        export TVBOX_BUNDLE="$BUNDLE" TVBOX_NO_PULL=1
+        tmp=$(mktemp -d)
+        if git clone -q "$BUNDLE" "$tmp/repo"; then script="$tmp/repo/bootstrap.sh"; else script=""; fi
+      fi
+      if [ -z "${script:-}" ]; then
+        script=$(mktemp)
+        if ! curl -fsSL --retry 5 --retry-delay 10 "$BOOTSTRAP_URL" -o "$script"; then
+          echo "$(date -Is) could not download bootstrap.sh; will retry on next boot"
+          exit 1
+        fi
+      fi
+
+      if bash "$script"; then
         touch "$MARKER"
         systemctl disable tvbox-firstboot.service
         echo "=== $(date -Is) tvbox first-boot setup finished OK"
@@ -128,18 +140,32 @@ autoinstall:
       UNIT
     - curtin in-target --target=/target -- systemctl enable tvbox-firstboot.service
 
-    # 3. Optional pre-filled env file from the seed USB/ISO (file name: tvbox-seed.env).
+    # 3. Pre-filled answers + repo bundle from the installer medium. With the single-stick layout
+    #    the stick is the live medium (/cdrom): seed/ and tv-box/ sit on it. A separate CIDATA
+    #    stick is still supported. Nothing here is fatal: first boot falls back to GitHub.
     - |
       mkdir -p /mnt/tvbox-seed
       for dev in /dev/disk/by-label/CIDATA /dev/disk/by-label/cidata; do
         [ -e "$dev" ] && mount -o ro "$dev" /mnt/tvbox-seed 2>/dev/null && break
       done
-      for f in /mnt/tvbox-seed/tvbox-seed.env /cdrom/tvbox-seed.env; do
+      for f in /cdrom/seed/tvbox-seed.env /mnt/tvbox-seed/tvbox-seed.env /cdrom/tvbox-seed.env; do
         if [ -f "$f" ]; then
           install -D -m 600 "$f" /target/opt/tvbox-seed.env
           break
         fi
       done
+      b=/cdrom/tv-box/tvbox.bundle
+      if [ -f "$b" ]; then
+        ok=1
+        if [ -f /cdrom/tv-box/tvbox.bundle.sha256 ]; then
+          want=$(cut -d' ' -f1 /cdrom/tv-box/tvbox.bundle.sha256)
+          have=$(sha256sum "$b" | cut -d' ' -f1)
+          [ "$want" = "$have" ] || ok=0
+        fi
+        if [ "$ok" = 1 ]; then install -D -m 644 "$b" /target/opt/tvbox.bundle; else echo "tvbox.bundle checksum mismatch: ignored"; fi
+      fi
       umount /mnt/tvbox-seed 2>/dev/null || true
 
-  shutdown: reboot
+  # Power off (not reboot): the stick is still plugged in and most firmware boots USB first, which
+  # would start the installer again. Unplug the stick, then press the power button.
+  shutdown: poweroff

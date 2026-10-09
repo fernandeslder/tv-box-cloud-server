@@ -22,6 +22,18 @@ die()  { _c 31; printf '  ✗ %s\n' "$*" >&2; _c 0; exit 1; }
 need_root() { [ "$(id -u)" -eq 0 ] || [ -n "${TVBOX_TEST_NOROOT:-}" ] || die "run with sudo: sudo $0 $*"; }
 apt_install() { DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"; }
 have() { command -v "$1" >/dev/null 2>&1; }
+# Install each package on its own so one name missing from this release (they get merged/renamed
+# between Ubuntu/Debian versions) never blocks the rest. Returns 0 even when some are unavailable.
+apt_install_optional() {
+  local p
+  for p in "$@"; do
+    if apt-cache show "$p" >/dev/null 2>&1; then
+      apt_install "$p" || warn "could not install optional package $p"
+    else
+      warn "package $p does not exist on this release: skipped"
+    fi
+  done
+}
 
 # The human who owns the box: whoever ran sudo, else the first normal user.
 detect_user() {
