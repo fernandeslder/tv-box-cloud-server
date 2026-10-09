@@ -15,14 +15,15 @@
 ## Architecture
 
 ```
-TV <-HDMI- [TV BOX]  Ubuntu Server 24.04 + (optional) Plasma/Kodi
+TV <-HDMI- [TV BOX]  Ubuntu Server 26.04 LTS + (optional) Plasma/Kodi
   SSD (NVMe)  /mnt/cache   DBs, thumbnails, transcodes, landing/ (write cache)
   USB HDDs    /mnt/hdd/*   data disk(s) + a dedicated backup disk, mounted by UUID
   mergerfs    /mnt/pool    = landing (SSD) + data HDD(s). New writes -> SSD. mover.sh -> HDD.
   Docker      net:   Pi-hole, Unbound, Caddy, (cloudflared), Homepage, Uptime Kuma, Beszel
               cloud: Immich (+Postgres+Redis+ML), Nextcloud (+MariaDB+cron)
               media: Jellyfin, Navidrome, Audiobookshelf (profile)  torrent: gluetun+qBittorrent (profile)
-  Host        Samba (\\tvbox\Uploads, \\tvbox\Cloud), Tailscale (subnet router), ingest + AI timers, restic
+  Host        Samba (\\tvbox\Uploads, \\tvbox\Cloud), Tailscale (subnet router), ingest + AI timers, restic,
+              SMART + backup restore-test timers, battery charge cap (laptop chassis)
 
 Phones/PCs --LAN--> Caddy (https://*.domain, trusted cert via Cloudflare DNS-01) --> apps
 Away:  Tailscale (subnet route to the LAN IP; Pi-hole answers *.domain)   -> same URLs
@@ -41,7 +42,10 @@ Legion (GPU): Ollama (Jev judge, vision), whisper, Immich ML CUDA  -- over Tails
 3. TLS = **Cloudflare DNS-01** wildcard on your domain (nothing to install on devices). Without a domain: Caddy local CA + a one-tap `root.crt` on the setup page.
 4. Remote = **Tailscale** (subnet router) for everything; **Cloudflare Tunnel** only for public share links.
 5. External AI = **Command Code Provider API** only; Legion first.
-6. OS = **Ubuntu Server 24.04 LTS** recommended; Debian 13 / Linux Mint 22 work with the same installer.
+6. OS = **Ubuntu Server 26.04.1 LTS** (kernel 7.0, Mesa 26, Plasma 6.6, Kodi 21, mergerfs 2.40, restic 0.18; supported to 2031).
+   Chosen over 24.04 (Kodi 20/Plasma 5.27, still fully supported by the installer) after checking that every apt package
+   the installer asks for exists on 26.04 and that Docker's repo has a `resolute` suite. Not an immutable OS, on purpose:
+   the box stays a normal apt system you can change. Debian 13 / Linux Mint 22 / Ubuntu 24.04 work with the same scripts.
 
 ## Cost policy
 Free > self-hosted > cheap-and-smart > strong. External calls are redacted, transcript-only (~4KB), tiered (`jev` -> free -> value -> strong), and capped monthly. Honest exceptions: NVIDIA driver blob, Tailscale/Cloudflare control planes (proprietary, free tiers), open-weights model licenses.

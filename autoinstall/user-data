@@ -1,5 +1,5 @@
 #cloud-config
-# TV box — Ubuntu Server 24.04 autoinstall (Subiquity) seed. TEMPLATE.
+# TV box — Ubuntu Server 26.04 LTS autoinstall (Subiquity) seed. TEMPLATE. (24.04 also works.)
 # Fill it with ./make-seed.sh (recommended) or by hand: replace every
 # value written as at-at-NAME-at-at below (USERNAME, PASSWORD_HASH, SSH_KEY,
 # KEYBOARD). See autoinstall/README.md.

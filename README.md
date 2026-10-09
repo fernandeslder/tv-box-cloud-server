@@ -17,7 +17,7 @@ or, from a clone: `sudo ./setup.sh`
 
 It asks a handful of questions (domain, TV desktop yes/no, optional extras), **generates every password itself**, detects and formats your blank USB disks after you type `ERASE`, installs Docker, starts everything, and prints one address to open on your phone: `https://setup.<your-domain>` (app links, QR codes, network-drive instructions).
 
-Zero-touch from a bare USB stick: [`autoinstall/`](autoinstall/README.md). Flash guide: [`docs/01-flash-guide.md`](docs/01-flash-guide.md).
+Zero-touch from a USB stick you already own (no reformat): [`autoinstall/build-usb.sh`](autoinstall/README.md). Flash guide: [`docs/01-flash-guide.md`](docs/01-flash-guide.md). OS: **Ubuntu Server 26.04.1 LTS** (24.04 also works).
 
 ## Day to day
 
@@ -25,6 +25,8 @@ Zero-touch from a bare USB stick: [`autoinstall/`](autoinstall/README.md). Flash
 tvbox status      # storage, containers, addresses
 tvbox doctor      # health check with plain-English fixes
 tvbox backup      # run the backup now (also nightly)
+tvbox verify-backup  # restore a sample from the backup and compare it (also weekly)
+tvbox smart       # SMART health of every disk (also daily)
 tvbox disks       # USB disk status / add a disk
 tvbox update      # pull new versions
 tvbox help
@@ -40,6 +42,7 @@ tvbox help
 | `\\tvbox\Uploads`, `\\tvbox\Cloud` | Samba shares. Drop anything in **Uploads**; it is sorted automatically |
 | `home.<domain>`, `status.`, `metrics.`, `pihole.` | Dashboard, uptime, metrics, ad-blocking admin |
 | `tv.`, `music.`, `audio.` | Jellyfin, Navidrome, Audiobookshelf (optional profile) |
+| `docs.` | Paperless-ngx: OCR + full-text search for scans/PDFs (optional profile `docs`, drop files in `\\tvbox\Paperless`) |
 
 Away from home: install Tailscale on the phone and everything works the same. Optional **public share links** (Nextcloud shares, Immich shared albums) go through a Cloudflare Tunnel — no port forwarding, works with a dynamic IP — and expose *only* share pages, never logins or admin.
 
@@ -50,10 +53,10 @@ setup.sh, bootstrap.sh     the entry points
 scripts/                   installer steps (10-60), tvbox CLI, disks.sh, mover.sh, ingest + AI pipeline
 docker/                    compose stacks: net (DNS, Caddy, tunnel, dashboards), cloud, media (profiles)
 configs/                   systemd units (templated), Samba, SSH, router.conf.example
-backups/                   restic backup + restore
+backups/                   restic backup + restore + weekly restore test (verify.sh)
 clients/                   Windows / Mac / Linux "connect me" helpers
 legion/                    one-command setup for the GPU worker (Windows + CachyOS)
-autoinstall/               unattended Ubuntu install seed
+autoinstall/               unattended Ubuntu install: seed + one-stick USB builder (build-usb.sh)
 tests/                     bats suite (also runs in CI)
 docs/                      the full plan; start with 00-overview.md
 ```
@@ -64,6 +67,6 @@ docs/                      the full plan; start with 00-overview.md
 
 ## Status
 
-Everything is lint-clean and unit-tested (`bats tests`: shellcheck, `docker compose config`, Caddy validation, the mover, router, redactor, ingest, wizard). The parts that need real hardware — formatting disks, mounts, systemd, container start, Cloudflare/Tailscale accounts — were written carefully but have **not yet run on the box**; `docs/review-fixes.md` lists exactly what to watch on first boot.
+Everything is lint-clean and unit-tested (`bats tests`: shellcheck, `docker compose config`, Caddy validation, the mover, router, redactor, ingest, wizard, backup + restore test, SMART, USB builder). CI also checks weekly that every pinned container image still exists (`scripts/check-images.py`). The parts that need real hardware — formatting disks, mounts, systemd, container start, Cloudflare/Tailscale accounts — were written carefully but have **not yet run on the box**; `docs/review-fixes.md` lists exactly what to watch on first boot.
 
 MIT licensed — see [LICENSE](LICENSE).
