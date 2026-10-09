@@ -42,3 +42,34 @@ Docs drift fixed (all docs rewritten; `docs/11` reference removed; thresholds 0.
 4. `cloudflare.sh` against the live Cloudflare API (falls back to dashboard instructions on any error); Caddy's xcaddy build.
 5. Samba/Avahi/wsdd discovery from Windows, macOS, Android.
 6. The autoinstall seed and the Legion scripts (see their READMEs).
+
+---
+
+# Second review pass (2026-10-09)
+
+Found by reading every installer step against a real Ubuntu 26.04 / 24.04 package index and by running the
+suite on a btrfs-root machine. Status letters as above (T = bats, S = static, H = needs hardware).
+
+| Finding | Fix | |
+|---|---|---|
+| `disks.sh` could not recognise the system disk when `/` is a btrfs subvolume (`findmnt` prints `/dev/nvme0n1p2[/@]`) or LVM/LUKS: the system disk was listed as "has data" and `add --force` would have been allowed to wipe it | `root_disks()` walks the device chain (`lsblk -s`) and strips the `[...]` suffix; scan also marks any disk with a mounted filesystem "in use"; `add` refuses the system disk even with `--force` | T |
+| `tvbox` was installed as a *copy* in `/usr/local/bin`, so it could not find `lib.sh` and every `tvbox ...` command (and the netwatch timer) failed | installed as a symlink; the CLI also falls back to `/opt/tvbox/scripts` and fails with a clear message | T |
+| `rand()` (`tr \| head` under `pipefail`) exits 141 | rewritten without the pipe | T |
+| `10-base.sh` asked for `mesa-va-drivers`, which no longer exists on 26.04 (merged into `mesa-libgallium`): the whole `apt` call failed and `vainfo`/`libva2` were never installed | optional packages are installed one by one and skipped with a warning | S |
+| `dnsutils`, `unzip`, `binutils` were used by `tvbox doctor` / ingest but never installed (doctor's DNS check always failed; OOXML/ODF text extraction silently returned nothing) | added to the base package list | S |
+| Backup aborted when any source path was missing or one file was unreadable (restic exit 3) | only existing paths are passed; exit 3 is a warning (the snapshot is written) | T |
+| Wizard overwrote a seed's `COMPOSE_PROFILES` / `TVBOX_DESKTOP` with its built-in defaults in unattended mode; CRLF seeds corrupted values | seed answers win when unattended; CR stripped | T |
+| `ollama/ollama:cuda` does not exist (the default image already has CUDA) | pinned `ollama/ollama:0.40.2`; `scripts/check-images.py` + weekly CI now verify every pinned tag | T/online |
+| First boot downloaded `bootstrap.sh` from `master` even when the repo on the installer stick was newer/older | one-stick builder ships a `git bundle`; first boot clones it (pinned commit, GitHub optional) | T |
+| Installer rebooted with the stick still plugged in (re-entering the installer on most firmware) | `shutdown: poweroff` | S |
+| yt-dlp from apt is months old (YouTube breaks weekly) | upstream binary in `/usr/local/bin` + weekly self-update timer | H |
+
+New, all with tests: weekly backup **restore test** (`backups/verify.sh`), daily **SMART** check, laptop **battery charge cap**,
+optional **Paperless-ngx** profile, **one-stick USB builder**, image-existence check.
+
+## Still not verifiable off-box (added to the list above)
+7. `build-usb.sh` output booting on the real box (UEFI entry, `/cdrom` as the live medium, seed discovery) and the
+   Subiquity `late-commands` that copy `seed/` and `tv-box/` from `/cdrom`.
+8. Paperless-ngx 3.x first start with the environment given in `docker/cloud/compose.yml`.
+9. `battery-care.sh` on the actual chassis (needs the kernel's `charge_control_*_threshold`).
+10. Plasma 6 Wayland autologin through SDDM (`/etc/sddm.conf.d/autologin.conf`) on 26.04.
