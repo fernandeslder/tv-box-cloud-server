@@ -27,6 +27,7 @@ menuentry 'UEFI Firmware Settings' {
 }
 fi
 G
+  ln -s . "$T/iso/ubuntu"; ln -s casper "$T/iso/stable"   # FAT32 cannot hold symlinks
   echo k > "$T/iso/casper/vmlinuz"; echo i > "$T/iso/casper/initrd"; echo e > "$T/iso/EFI/BOOT/BOOTX64.EFI"
   xorriso -as mkisofs -quiet -o "$T/fake.iso" "$T/iso" 2>/dev/null
   ( cd "$T" && sha256sum fake.iso > SHA256SUMS )
@@ -97,4 +98,13 @@ build() { "$REPO/autoinstall/build-usb.sh" --iso "$T/fake.iso" --target "$T/stic
         --password-hash-file "$T/hash" --user tvbox --yes
   [ "$status" -eq 0 ]; [ -f "$T/stick/seed/user-data" ]
   ( cd "$T/stick" && sha256sum -c tv-box/SHA256SUMS >/dev/null )
+}
+@test "ISO symlinks are left out (FAT32 has none) and everything else is unpacked" {
+  run build; [ "$status" -eq 0 ]
+  [ ! -e "$T/stick/ubuntu" ]; [ ! -L "$T/stick/stable" ]; [ -f "$T/stick/EFI/BOOT/BOOTX64.EFI" ]
+}
+@test "a shallow clone is refused with a clear message (a bundle needs full history)" {
+  git clone -q --depth 1 "file://$REPO" "$T/shallow"
+  run "$T/shallow/autoinstall/build-usb.sh" --iso "$T/fake.iso" --target "$T/stick" --ssh-key-file "$T/k.pub" --password-hash-file "$T/hash" --yes
+  [ "$status" -ne 0 ]; [[ "$output" == *"shallow clone"* ]]
 }

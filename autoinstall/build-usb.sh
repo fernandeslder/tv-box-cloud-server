@@ -110,9 +110,16 @@ fi
 # --- 2. unpack the ISO onto the stick ----------------------------------------------------------------
 if [ "$DO_ISO" -eq 1 ]; then
 echo "unpacking $iso_name (this takes a few minutes on USB) ..."
-if command -v bsdtar >/dev/null 2>&1; then bsdtar -xf "$ISO" -C "$TARGET"
-elif command -v xorriso >/dev/null 2>&1; then xorriso -osirrox on -indev "$ISO" -extract / "$TARGET" >/dev/null 2>&1
-elif command -v 7z >/dev/null 2>&1; then 7z x -y -o"$TARGET" "$ISO" >/dev/null
+# FAT32 has no symlinks (the ISO's `dists/stable -> resolute` style links): leave them out, the
+# installer only needs the real suite directory.
+if command -v bsdtar >/dev/null 2>&1; then
+  links=$(mktemp)
+  bsdtar -tvf "$ISO" | awk '$1 ~ /^l/ { for (i = 1; i <= NF; i++) if ($i == "->") { print $(i - 1); break } }' > "$links"
+  bsdtar -xf "$ISO" -C "$TARGET" --exclude-from "$links" || { rm -f "$links"; die "unpacking the ISO failed"; }
+  rm -f "$links"
+elif command -v xorriso >/dev/null 2>&1; then xorriso -osirrox on -indev "$ISO" -extract / "$TARGET" >/dev/null 2>&1 \
+  || die "unpacking the ISO failed"
+elif command -v 7z >/dev/null 2>&1; then 7z x -y -o"$TARGET" "$ISO" >/dev/null || die "unpacking the ISO failed"
 else die "need bsdtar, xorriso or 7z to unpack the ISO"; fi
 # 7z leaves a "[BOOT]" folder of El Torito images behind; the stick does not need it.
 if [ -d "${TARGET:?}/[BOOT]" ]; then rm -rf "${TARGET:?}/[BOOT]"; fi
@@ -150,6 +157,8 @@ fi
 TB="$TARGET/tv-box"
 mkdir -p "$TB"
 git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || die "$REPO is not a git checkout: cannot build tvbox.bundle"
+[ "$(git -C "$REPO" rev-parse --is-shallow-repository)" != true ] \
+  || die "$REPO is a shallow clone: a git bundle needs full history (run: git -C $REPO fetch --unshallow)"
 if ! git -C "$REPO" diff --quiet HEAD -- 2>/dev/null; then
   echo "warning: the repo has uncommitted changes: the bundle holds the last COMMIT only" >&2
 fi
