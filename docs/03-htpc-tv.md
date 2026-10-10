@@ -37,3 +37,15 @@ sudo apt install -y hypnotix firefox mpv yt-dlp
 
 ## Mesa note
 Mesa 25 dropped VDPAU — use **VA-API everywhere**.
+
+## One TV interface: Kodi + the FTV skin + app tiles (set up 2026-10-10)
+Goal: a smart-TV-style home (left menu, poster rows, app tiles) instead of a desktop. Kodi stays the home screen; the apps open on top of it and
+closing one drops you back to Kodi.
+- **Skin:** `fTV` ("a skin based on the Fire TV UI", official Kodi 21 repo): Kodi > Settings > Interface > Skin > Skin > Get more > fTV. It pulls
+  its helpers (skinshortcuts, skinvariables, TMDb Helper, ...) by itself. Arctic Horizon 2 is archived and not in the official repo.
+- **App tiles:** `~/.kodi/userdata/favourites.xml` holds `System.Exec("flatpak run <app-id>")` entries (template: `configs/kodi/favourites.xml`;
+  tile pictures go in `~/.kodi/userdata/tvbox-tiles/` and are referenced as `special://masterprofile/tvbox-tiles/<name>.png`). They show under
+  *Favourites* in fTV and can be added to the home screen from the skin's menu editor.
+- **Autostart:** `~/.config/autostart/tvbox-kodi.desktop` (`kodi -fs`) starts Kodi fullscreen at login; Plasma stays underneath as the fallback.
+- **Not an exact copy of the r/kodi concept picture:** that is a mock-up (hero banner, rounded game tiles, weather card). fTV gives the same
+  layout idea; the rest would need a custom skin.

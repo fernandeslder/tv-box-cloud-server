@@ -1,0 +1,10 @@
+<favourites>
+    <favourite name="YouTube">System.Exec(&quot;flatpak run rocks.shy.VacuumTube&quot;)</favourite>
+    <favourite name="Stremio">System.Exec(&quot;flatpak run com.stremio.Stremio&quot;)</favourite>
+    <favourite name="Netflix">System.Exec(&quot;firefox --kiosk https://www.netflix.com&quot;)</favourite>
+    <favourite name="Disney+">System.Exec(&quot;firefox --kiosk https://www.disneyplus.com&quot;)</favourite>
+    <favourite name="Jellyfin">System.Exec(&quot;flatpak run org.jellyfin.JellyfinDesktop&quot;)</favourite>
+    <favourite name="Music">System.Exec(&quot;flatpak run com.github.KRTirtho.Spotube&quot;)</favourite>
+    <favourite name="Moonlight">System.Exec(&quot;flatpak run com.moonlight_stream.Moonlight&quot;)</favourite>
+    <favourite name="Web">System.Exec(&quot;firefox&quot;)</favourite>
+</favourites>
