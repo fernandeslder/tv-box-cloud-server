@@ -8,6 +8,9 @@ if [ "${PKG_FAMILY:-debian}" = arch ]; then
   # The desktop itself must install; the extras are best-effort and each skipped if this release lacks it.
   pkg_install plasma-desktop plasma-bigscreen sddm kodi \
     || die "could not install the TV desktop (plasma-desktop, plasma-bigscreen, sddm, kodi)"
+  # Debian's package enables the display manager itself; on Arch it is left disabled
+  systemctl enable sddm.service >/dev/null 2>&1 || warn "could not enable sddm.service"
+  systemctl set-default graphical.target >/dev/null 2>&1 || true
   # Steam is [multilib]-only: when this image ships the repo commented out, enable it
   # and refresh the databases so Steam resolves in the optional sweep below.
   pacman_conf="${TVBOX_PACMAN_CONF:-/etc/pacman.conf}"

@@ -30,3 +30,12 @@ load helpers
 @test "desktop: Kodi's official add-on repository package is installed (else no skins / Get more)" {
   grep -q 'apt_install_optional kodi-repository-kodi' "$REPO/scripts/20-desktop-htpc.sh"
 }
+@test "no systemd unit uses /run/lock (root-only on Arch): lock files live in a service-owned runtime dir" {
+  ! grep -rn '/run/lock' "$REPO/configs/systemd/"
+  grep -q 'RuntimeDirectory=tvbox' "$REPO/configs/systemd/ai-queue.service"
+  grep -q 'RuntimeDirectory=tvbox' "$REPO/configs/systemd/ingest.service"
+}
+@test "arch: the display manager is enabled and Samba's smb unit name is handled" {
+  grep -q 'systemctl enable sddm.service' "$REPO/scripts/20-desktop-htpc.sh"
+  grep -q 'SMB_UNIT=smb' "$REPO/scripts/render-config.sh"
+}

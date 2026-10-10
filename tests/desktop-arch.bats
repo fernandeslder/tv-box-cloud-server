@@ -127,5 +127,7 @@ teardown() { rm -rf "$T"; }
   grep -q '^flatpak remote-add --if-not-exists flathub' "$PKLOG"
   [[ "$output" == *"could not fetch upstream yt-dlp"* ]]
   # shellcheck disable=SC2314
-  ! grep -q '^systemctl' "$PKLOG"
+  # the only systemctl calls: enabling the display manager and the graphical default target
+  grep -qx 'systemctl enable sddm.service' "$PKLOG"
+  ! grep '^systemctl' "$PKLOG" | grep -vxE 'systemctl (enable sddm.service|set-default graphical.target)'
 }

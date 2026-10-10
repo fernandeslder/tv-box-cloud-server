@@ -4,9 +4,11 @@ ConditionPathIsMountPoint=@POOL@
 After=tvbox-storage.service
 
 [Service]
+RuntimeDirectory=tvbox
+RuntimeDirectoryPreserve=yes
 Type=oneshot
 User=@USER@
 Group=www-data
 UMask=0002
 WorkingDirectory=@REPO@/scripts
-ExecStart=/usr/bin/flock -n /run/lock/tvbox-ingest.lock @REPO@/scripts/ingest.sh @POOL@/inbox
+ExecStart=/usr/bin/flock -n /run/tvbox/ingest.lock @REPO@/scripts/ingest.sh @POOL@/inbox

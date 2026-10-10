@@ -36,8 +36,11 @@ if [ "$(id -u)" -eq 0 ] && have smbd; then
   if id "$TVBOX_USER" >/dev/null 2>&1 && [ -n "$(env_get SMB_PASSWORD)" ]; then
     printf '%s\n%s\n' "$(env_get SMB_PASSWORD)" "$(env_get SMB_PASSWORD)" | smbpasswd -a -s "$TVBOX_USER" >/dev/null
   fi
-  systemctl enable --now smbd avahi-daemon >/dev/null 2>&1 || true
-  systemctl restart smbd 2>/dev/null || true
+  # Debian names the unit smbd; Arch/Fedora call it smb (+ nmb)
+  SMB_UNIT=smbd; systemctl cat smb.service >/dev/null 2>&1 && SMB_UNIT=smb
+  systemctl enable --now "$SMB_UNIT" avahi-daemon >/dev/null 2>&1 || true
+  [ "$SMB_UNIT" != smb ] || systemctl enable --now nmb >/dev/null 2>&1 || true
+  systemctl restart "$SMB_UNIT" 2>/dev/null || true
   systemctl enable --now wsdd2 >/dev/null 2>&1 || systemctl enable --now wsdd >/dev/null 2>&1 || true
 fi
 

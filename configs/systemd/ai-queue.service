@@ -5,9 +5,11 @@ Wants=network-online.target
 ConditionPathIsMountPoint=@POOL@
 
 [Service]
+RuntimeDirectory=tvbox
+RuntimeDirectoryPreserve=yes
 Type=oneshot
 User=@USER@
 Group=www-data
 UMask=0002
 Environment="LEGION_HOSTS=legion-linux legion-win"
-ExecStart=/usr/bin/flock -n /run/lock/tvbox-ai-queue.lock @REPO@/scripts/ai-queue.sh
+ExecStart=/usr/bin/flock -n /run/tvbox/ai-queue.lock @REPO@/scripts/ai-queue.sh
