@@ -40,6 +40,17 @@ fi
 
 have flatpak && flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
 
+# The TV apps ship as flatpaks (newer than the distro's packages; docs/03).
+# flathub was added above; each app is its own install so one renamed on
+# Flathub never blocks the rest.
+if [ "${PKG_FAMILY:-debian}" = arch ] && have flatpak; then
+  for app in com.moonlight_stream.Moonlight rocks.shy.VacuumTube \
+             com.stremio.Stremio com.github.KRTirtho.Spotube; do
+    flatpak install --assumeyes flathub "$app" \
+      || warn "could not install the flatpak TV app $app"
+  done
+fi
+
 # YouTube changes weekly and the distro's yt-dlp is months old: use the upstream release binary
 # (/usr/local/bin wins over /usr/bin) and let a weekly timer self-update it.
 if curl -fsSL -m 120 --retry 3 https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp.new; then

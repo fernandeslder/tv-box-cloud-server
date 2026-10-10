@@ -131,3 +131,18 @@ teardown() { rm -rf "$T"; }
   grep -qx 'systemctl enable sddm.service' "$PKLOG"
   ! grep '^systemctl' "$PKLOG" | grep -vxE 'systemctl (enable sddm.service|set-default graphical.target)'
 }
+
+@test "arch: installs the flatpak TV apps from flathub" {
+  stock_pacman_conf
+  PATH="$B:$PATH" run "$REPO/scripts/20-desktop-htpc.sh"
+  [ "$status" -eq 0 ]
+  # flathub is ensured (added if missing) before any app is pulled from it
+  remote="$(grep -n '^flatpak remote-add --if-not-exists flathub' "$PKLOG" | head -1 | cut -d: -f1)"
+  [ -n "$remote" ]
+  for app in com.moonlight_stream.Moonlight rocks.shy.VacuumTube \
+    com.stremio.Stremio com.github.KRTirtho.Spotube; do
+    line="$(grep -nxF "flatpak install --assumeyes flathub $app" "$PKLOG" | head -1 | cut -d: -f1)"
+    [ -n "$line" ]            # the app was installed
+    [ "$line" -gt "$remote" ] # after flathub was ensured
+  done
+}
