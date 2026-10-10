@@ -32,25 +32,15 @@ autoinstall:
     authorized-keys:
       - '@@SSH_KEY@@'
 
-  # Ethernet by DHCP. Optional Wi-Fi: delete the leading "#W# " (4 chars) from
-  # the block below and fill SSID/password (make-seed.sh --wifi-ssid does it).
-  network:
-    version: 2
-    ethernets:
-      all-en:
-        match:
-          name: "en*"
-        dhcp4: true
-        optional: true
-#W#     wifis:
-#W#       all-wl:
-#W#         match:
-#W#           name: "wl*"
-#W#         dhcp4: true
-#W#         optional: true
-#W#         access-points:
-#W#           '@@WIFI_SSID@@':
-#W#             password: '@@WIFI_PASS@@'
+  # NO custom `network:` block on purpose. The installer's own default (DHCP on eth*/en*) is used
+  # for the install; a custom block was applied to the live installer too and a Wi-Fi/`match` entry
+  # crashed it ("problem applying the network configuration"). Wi-Fi is written to the INSTALLED
+  # system only, in the late-commands below, so it can never stop the install.
+
+  # If no mirror is reachable (flaky router, DNS, IPv6) install from the ISO's own pool instead of
+  # aborting. The OS then installs with no network at all; the first boot is what needs the internet.
+  apt:
+    fallback: offline-install
 
   # Install to the SSD/NVMe only, whole disk, no LVM. HDDs (rotational) never
   # match "ssd: true", but keep USB drives unplugged anyway: a USB SSD would match.
@@ -61,14 +51,37 @@ autoinstall:
       match:
         ssd: true
 
-  packages:
-    - git
-    - curl
-    - ca-certificates
-    - avahi-daemon     # makes the box reachable as tvbox.local
-    - libnss-mdns
+  # No `packages:` list: git/curl/avahi are installed by the first-boot script (below), so the OS
+  # install does not depend on the network. (They are not on the ISO's pool anyway.)
 
   late-commands:
+    # 0. Wi-Fi (only when built with --wifi-ssid: make-seed.sh removes the leading "#W# "). Written
+    #    to the installed system with the interface's real name (no glob/match), mode 600.
+#W#     - |
+#W#       ifc=""
+#W#       for d in /sys/class/net/*; do
+#W#         if [ -d "$d/wireless" ]; then ifc=$(basename "$d"); break; fi
+#W#       done
+#W#       if [ -n "$ifc" ]; then
+#W#         mkdir -p /target/etc/netplan
+#W#         umask 077
+#W#         cat > /target/etc/netplan/60-tvbox-wifi.yaml <<'NETPLAN'
+#W#       network:
+#W#         version: 2
+#W#         wifis:
+#W#           __IFACE__:
+#W#             dhcp4: true
+#W#             optional: true
+#W#             access-points:
+#W#               '@@WIFI_SSID@@':
+#W#                 password: '@@WIFI_PASS@@'
+#W#       NETPLAN
+#W#         sed -i "s/__IFACE__/$ifc/" /target/etc/netplan/60-tvbox-wifi.yaml
+#W#         curtin in-target --target=/target -- sh -c 'dpkg -s wpasupplicant >/dev/null 2>&1 || apt-get install -y -qq wpasupplicant' || true
+#W#       else
+#W#         echo "no Wi-Fi interface found: Wi-Fi not configured (ethernet still works)"
+#W#       fi
+
     # 1. First-boot script (runs the repo bootstrap once, then disables itself).
     #    Prefers the repo bundle copied from the installer USB (pinned commit, works when GitHub
     #    is unreachable) and falls back to downloading bootstrap.sh from GitHub.
@@ -87,10 +100,23 @@ autoinstall:
       echo "=== $(date -Is) tvbox first-boot setup starting"
 
       # network-online can fire before DHCP/Wi-Fi really works: probe for up to 10 min
+      probe() {
+        if command -v curl >/dev/null 2>&1; then curl -fsI --max-time 10 https://download.docker.com >/dev/null
+        else getent hosts download.docker.com >/dev/null; fi
+      }
       for _ in $(seq 1 60); do
-        curl -fsI --max-time 10 https://download.docker.com >/dev/null && break
+        probe && break
         echo "$(date -Is) waiting for internet..."
         sleep 10
+      done
+
+      # The installer no longer installs these (so the OS install needs no network).
+      # git is needed to clone the bundle below; avahi makes the box reachable as tvbox.local.
+      for _ in 1 2 3; do
+        apt-get update -qq \
+          && apt-get install -y -qq git curl ca-certificates avahi-daemon libnss-mdns && break
+        echo "$(date -Is) apt not ready, retrying..."
+        sleep 20
       done
 
       export TVBOX_NONINTERACTIVE=1 DEBIAN_FRONTEND=noninteractive

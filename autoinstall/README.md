@@ -71,7 +71,13 @@ Seed on a second FAT32 stick labelled `CIDATA` (`./make-seed.sh` builds `seed/` 
 - Installs to the SSD/NVMe only (`layout: direct`, `match: {ssd: true}`): HDDs are rotational so they don't match,
   but a USB SSD would — keep USB drives unplugged. The screen is interactive so you always confirm.
 - Hostname `tvbox`, your user, **SSH key-only login** (password login over SSH is off; the console still takes the password).
-- Timezone from the seed (default: the PC that built it), ethernet via DHCP (Wi-Fi optional), packages `git curl avahi-daemon`.
+- Timezone from the seed (default: the PC that built it). Network during the install is the installer's own default (DHCP on `en*`/`eth*`);
+  there is deliberately no custom `network:` block. Wi-Fi (if built with `--wifi-ssid`) is written only to the installed system
+  (`/etc/netplan/60-tvbox-wifi.yaml`, mode 600, real interface name), so it cannot stop the install.
+- `apt: fallback: offline-install`: if no mirror is reachable the OS installs from the ISO's own pool. `git curl avahi-daemon` are
+  installed by the first-boot script, not by the installer, so the OS install itself needs no network.
+- The ISO's `md5sum.txt` is updated for the patched `grub.cfg` (the installer verifies the medium and reports
+  "install media checksum verification failed" otherwise).
 - Copies `seed/tvbox-seed.env` → `/opt/tvbox-seed.env` (root-only, mode 600) and `tv-box/tvbox.bundle` → `/opt/tvbox.bundle` (checksum-verified).
 - Installs `tvbox-firstboot.service`: after the first boot and network-up it clones `/opt/tvbox` **from the bundle** (pinned commit,
   works when GitHub is down; falls back to downloading `bootstrap.sh` from `master`), then runs it with `TVBOX_NONINTERACTIVE=1`

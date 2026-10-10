@@ -73,3 +73,15 @@ optional **Paperless-ngx** profile, **one-stick USB builder**, image-existence c
 8. Paperless-ngx 3.x first start with the environment given in `docker/cloud/compose.yml`.
 9. `battery-care.sh` on the actual chassis (needs the kernel's `charge_control_*_threshold`).
 10. Plasma 6 Wayland autologin through SDDM (`/etc/sddm.conf.d/autologin.conf`) on 26.04.
+
+## Third pass: first real install attempt (2026-10-10)
+Found from photos of the installer crash screen on the T14s:
+- **Media checksum failed.** `build-usb.sh` patched `boot/grub/grub.cfg` but left the old sum in the ISO's `md5sum.txt`;
+  the installer's integrity check flagged the stick. Now `md5sum.txt` is updated on every build (also by `--seed-only`, which
+  repairs an already-built stick), with a test that `md5sum -c md5sum.txt` passes on the result.
+- **"Problem applying the network configuration" (`network_fail`).** The seed's custom `network:` block (glob `match` for `en*` and
+  `wl*` + Wi-Fi) was applied to the live installer, which had three NICs (onboard, a USB ethernet dongle, Wi-Fi). Removed: the
+  installer uses its default DHCP, and Wi-Fi is written to the target only. The exact netplan error was not visible in the photos, so
+  this removes the likely cause rather than a proven one; if it still fails, the installer log (Help -> Enter shell ->
+  `/var/log/installer/subiquity-server-debug.log`) has the real message.
+- **Hardening.** `apt.fallback: offline-install` and the package list moved from the installer to the first-boot script.

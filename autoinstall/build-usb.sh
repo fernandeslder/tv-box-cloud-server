@@ -153,6 +153,19 @@ else
   [ -f "$TARGET/boot/grub/grub.cfg" ] || die "--seed-only needs an unpacked ISO on the stick (run without it first)"
 fi
 
+# The installer verifies the medium against md5sum.txt ("install media checksum verification failed"
+# otherwise, and it then blames unrelated crashes on it). We edited grub.cfg, so record its new sum.
+# Runs on every build, so a stick made before this fix is repaired by --seed-only too.
+if [ -f "$TARGET/md5sum.txt" ]; then
+  new_md5=$(md5sum "$TARGET/boot/grub/grub.cfg" | cut -d' ' -f1)
+  md5_tmp=$(mktemp)
+  awk -v n="$new_md5" '$2 == "./boot/grub/grub.cfg" { print n "  " $2; next } { print }' "$TARGET/md5sum.txt" > "$md5_tmp"
+  cat "$md5_tmp" > "$TARGET/md5sum.txt"; rm -f "$md5_tmp"
+  ( cd "$TARGET" && grep -F ' ./boot/grub/grub.cfg' md5sum.txt | md5sum -c --quiet - ) \
+    || die "could not update md5sum.txt for boot/grub/grub.cfg"
+  echo "md5sum.txt updated for the patched boot/grub/grub.cfg"
+fi
+
 # --- 4. tv-box/ bundle --------------------------------------------------------------------------------------
 TB="$TARGET/tv-box"
 mkdir -p "$TB"
