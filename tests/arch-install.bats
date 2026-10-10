@@ -187,3 +187,25 @@ F
   [ "$status" -ne 0 ]
   [[ "$output" == *"missing $T/empty/disk.sh"* ]]
 }
+
+@test "--dry-run (the FLAG, no env) really runs nothing: sourced libs must not reset it" {
+  mk_tmp
+  mkdir -p "$T/bin"
+  # any real execution of these would leave a marker
+  for c in curl tar wipefs sgdisk mkfs.fat mkfs.btrfs mount umount pacstrap genfstab arch-chroot partprobe udevadm btrfs; do
+    printf '#!/bin/sh\necho "%s $*" >> "%s/EXECUTED"\n' "$c" "$T" > "$T/bin/$c"; chmod +x "$T/bin/$c"
+  done
+  # a whole, non-removable, non-USB nvme disk that is not the root disk
+  cat > "$T/bin/lsblk" <<'F'
+#!/bin/sh
+case "$*" in *TYPE,RM,TRAN*) echo "disk 0 nvme" ;; *RM,TRAN*) echo "0 nvme" ;; *NAME,TYPE*) echo "sdz disk" ;; *) exit 0 ;; esac
+F
+  printf '#!/bin/sh\necho /dev/sdz1\n' > "$T/bin/findmnt"; chmod +x "$T/bin/lsblk" "$T/bin/findmnt"
+  printf '%s\n' '$6$saltsalt$abcdefghijklmnopqrstuvwxyz' > "$T/hash"
+  ssh-keygen -q -t ed25519 -N '' -f "$T/k" -C t
+  PATH="$T/bin:$PATH" run bash "$REPO/autoinstall/arch-install.sh" --dry-run --disk /dev/nvme0n1 --confirm-wipe /dev/nvme0n1 \
+      --password-hash-file "$T/hash" --ssh-key-file "$T/k.pub"
+  [ "$status" -eq 0 ]
+  [ ! -e "$T/EXECUTED" ] || { cat "$T/EXECUTED"; false; }
+  [[ "$output" == *"DRY: "* ]]
+}

@@ -58,7 +58,7 @@ while [ "$#" -gt 0 ]; do
     --wifi-ssid) WIFI_SSID=$2; shift 2 ;;
     --bundle) BUNDLE=$2; shift 2 ;;
     --env-file) ENV_FILE=$2; shift 2 ;;
-    --dry-run) DRY=1; shift ;;
+    --dry-run) DRY=1; export TVBOX_DRY_RUN=1; shift ;;   # exported: the sourced libs read TVBOX_DRY_RUN
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown option: $1" ;;
   esac
@@ -107,6 +107,7 @@ done
 . "$LIB_DIR/disk.sh"       # arch_disk_prepare <dev> <mountpoint>
 # shellcheck disable=SC1091
 . "$LIB_DIR/packages.sh"   # arch_enable_cachyos_repos; arch_base_packages
+DRY="${TVBOX_DRY_RUN:-$DRY}"   # the libs set their own DRY at source time: re-assert ours
 
 # --- install --------------------------------------------------------------------
 if [ "$DRY" = 1 ]; then echo "TVBOX_DRY_RUN=1: every command below is printed, nothing runs"; fi
