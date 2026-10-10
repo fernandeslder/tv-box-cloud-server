@@ -10,7 +10,11 @@ set -euo pipefail
 SMARTCTL="${SMARTCTL:-smartctl}"
 OUT="${SMART_STATUS_FILE:-$TVBOX_STATE/smart-status}"
 NOTIFY="$(dirname "${BASH_SOURCE[0]}")/notify.sh"
-have "$SMARTCTL" || { echo "smart-check: smartctl missing (apt install smartmontools)" >&2; exit 0; }
+if [ "${PKG_FAMILY:-debian}" = arch ]; then
+  have "$SMARTCTL" || { echo "smart-check: smartctl missing (pacman -S --needed smartmontools)" >&2; exit 0; }
+else
+  have "$SMARTCTL" || { echo "smart-check: smartctl missing (apt install smartmontools)" >&2; exit 0; }
+fi
 
 parent_disk() {  # parent_disk <mountpoint> -> /dev/<disk> of the filesystem mounted there
   local src d

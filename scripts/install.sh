@@ -14,7 +14,11 @@ S="$REPO_DIR/scripts"
 step() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
 step "Checking this machine"
-have apt-get || die "this installer needs an apt-based OS (Ubuntu / Debian / Mint)"
+if [ "${PKG_FAMILY:-debian}" = arch ]; then
+  have pacman || die "this installer needs a pacman-based OS (Arch)"
+else
+  have apt-get || die "this installer needs an apt-based OS (Ubuntu / Debian / Mint)"
+fi
 [ "$(uname -m)" = x86_64 ] || warn "untested CPU architecture $(uname -m)"
 curl -fsS -m 10 -o /dev/null https://download.docker.com >/dev/null 2>&1 || die "no internet access (needed to download packages)"
 [ -n "$TVBOX_USER" ] && id "$TVBOX_USER" >/dev/null 2>&1 || die "cannot determine the owner account"

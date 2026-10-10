@@ -67,6 +67,13 @@ install_cert() {
     else
       warn "System-wide install failed (sudo needed)."
     fi
+  elif command -v pacman >/dev/null 2>&1 && command -v trust >/dev/null 2>&1; then
+    # Arch (p11-kit): `trust anchor` adds it to the system store; no update step.
+    if sudo trust anchor "$tmp/root.crt"; then
+      ok "Certificate installed system-wide."
+    else
+      warn "System-wide install failed (sudo needed)."
+    fi
   else
     warn "update-ca-certificates not found. Fedora/Arch: sudo trust anchor $tmp/root.crt"
   fi
@@ -82,7 +89,9 @@ install_cert() {
     done
     if [ "$n" -gt 0 ]; then ok "Certificate added to $n browser profile(s). Restart the browser."; else warn "No Firefox/Chrome NSS profiles found."; fi
   else
-    warn "certutil not found; Firefox keeps its own store (install libnss3-tools to automate, or import root.crt in Settings > Certificates)."
+    local nss_pkg=libnss3-tools
+    command -v pacman >/dev/null 2>&1 && nss_pkg=nss
+    warn "certutil not found; Firefox keeps its own store (install $nss_pkg to automate, or import root.crt in Settings > Certificates)."
   fi
 }
 
@@ -106,6 +115,8 @@ mount_gvfs() {
 
 write_fstab_recipe() {
   local cred="$HOME/.config/tvbox-smb.cred" pass uid gid
+  local pm_cmd="sudo apt install cifs-utils"
+  command -v pacman >/dev/null 2>&1 && pm_cmd="sudo pacman -S --needed --noconfirm cifs-utils"
   read -r -s -p "SMB password (hidden): " pass; echo
   mkdir -p "$HOME/.config"
   ( umask 077; printf 'username=%s\npassword=%s\n' "$USER_NAME" "$pass" > "$cred" )
@@ -117,7 +128,7 @@ write_fstab_recipe() {
 
 Run these once (needs sudo and the cifs-utils package):
 
-  sudo apt install cifs-utils        # or: dnf/pacman equivalent
+  $pm_cmd
   sudo mkdir -p /mnt/tvbox/Uploads /mnt/tvbox/Cloud
   sudo tee -a /etc/fstab <<'FSTAB'
 //${HOST}/Uploads /mnt/tvbox/Uploads cifs credentials=${cred},uid=${uid},gid=${gid},iocharset=utf8,vers=3.0,_netdev,nofail,x-systemd.automount,x-systemd.idle-timeout=60 0 0
