@@ -84,7 +84,7 @@ render() {  # render <template> <dest> KEY...
 
 # Default storage layout (override in docker/.env).
 # shellcheck disable=SC2034
-STORAGE_ROOT="$(env_get STORAGE_ROOT /mnt/pool)"
+STORAGE_ROOT="${STORAGE_ROOT:-$(env_get STORAGE_ROOT /mnt/pool)}"   # env override = test hook
 CACHE_ROOT="$(env_get CACHE_ROOT /mnt/cache)"
 HDD_ROOT="${HDD_ROOT:-/mnt/hdd}"
 LANDING_DIR="${LANDING_DIR:-$CACHE_ROOT/landing}"

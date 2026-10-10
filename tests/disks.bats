@@ -63,3 +63,34 @@ F
   PATH="$T/bin:$PATH" TVBOX_DRY_RUN=1 run "$REPO/scripts/disks.sh" add /dev/loop0 data --force --yes
   [ "$status" -ne 0 ]
 }
+
+# mergerfs daemonizes: started from a oneshot unit it was killed with the unit's cgroup (pool vanished).
+fake_pool_tools() {
+  mkdir -p "$T/bin" "$T/sysd"
+  cat > "$T/bin/systemd-run" <<'F'
+#!/bin/sh
+echo "systemd-run $*" >> "$LOGF"
+while [ "${1#--}" != "$1" ]; do shift; done
+exec "$@"
+F
+  cat > "$T/bin/mergerfs" <<'F'
+#!/bin/sh
+echo "mergerfs $*" >> "$LOGF"
+F
+  chmod +x "$T/bin/systemd-run" "$T/bin/mergerfs"
+}
+@test "the pool is mounted inside its own systemd scope, not in the calling unit" {
+  fake_pool_tools
+  LOGF="$T/log" TVBOX_TEST_NOROOT=1 TVBOX_SYSTEMD_RUN="$T/bin/systemd-run" TVBOX_SYSTEMD_DIR="$T/sysd" \
+    PATH="$T/bin:$PATH" run "$REPO/scripts/disks.sh" sync
+  [ "$status" -eq 0 ]
+  grep -q '^systemd-run --quiet --scope' "$T/log"
+  grep -q "^mergerfs .* $T/landing $T/pool" "$T/log"
+}
+@test "without systemd the pool is still mounted (direct mergerfs call)" {
+  fake_pool_tools
+  LOGF="$T/log" TVBOX_TEST_NOROOT=1 TVBOX_SYSTEMD_DIR="$T/no-such-dir" PATH="$T/bin:$PATH" run "$REPO/scripts/disks.sh" sync
+  [ "$status" -eq 0 ]
+  ! grep -q systemd-run "$T/log"
+  grep -q "^mergerfs " "$T/log"
+}

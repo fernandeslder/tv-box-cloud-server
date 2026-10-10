@@ -85,3 +85,17 @@ Found from photos of the installer crash screen on the T14s:
   this removes the likely cause rather than a proven one; if it still fails, the installer log (Help -> Enter shell ->
   `/var/log/installer/subiquity-server-debug.log`) has the real message.
 - **Hardening.** `apt.fallback: offline-install` and the package list moved from the installer to the first-boot script.
+
+## Fourth pass: first real boot (2026-10-10), found over SSH on the box
+- **The pool vanished a second after it mounted.** `mergerfs` daemonizes; started from a oneshot unit
+  (`tvbox-storage.service`, `tvbox-firstboot.service`) it stayed in that unit's cgroup and systemd killed it when the unit ended
+  (journal: "exiting main loop" right before "Deactivated successfully"; the 1-minute timer re-mounted and re-killed it).
+  Every app wrote into a plain `/mnt/pool` on the SSD. `disks.sh` now starts it in its own `systemd-run --scope`.
+  The unit's `SuccessExitStatus=0 1` and "Finished" status had hidden this; `tvbox doctor` ("pool mounted") is what caught it.
+- **Navidrome crash-looped.** It runs as `PUID:PGID` but Docker had created its bind-mounted data dir as root:
+  "unable to open database file". `install.sh` now creates it owned by `PUID:PGID`.
+- **`tvbox doctor` DNS check was a false alarm.** It also required the box's own resolver (the router, on purpose) to answer
+  for the LAN names; it now asks Pi-hole directly and requires the LAN IP in the answer.
+- **`STORAGE_ROOT` test override was ignored** by `lib.sh` (the other path variables honoured theirs); fixed, with two tests.
+- Expected on a fresh box with no HDDs/tokens: "Tailscale connected" and "last backup" FAIL until you run
+  `tailscale up` / add a backup disk.

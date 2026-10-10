@@ -44,6 +44,9 @@ install -d "$TVBOX_ETC"
 "$S/render-config.sh"
 ln -sf "$S/tvbox" /usr/local/bin/tvbox   # symlink: the CLI finds lib.sh next to the real file
 mkdir -p "$REPO_DIR/docker/net/data" "$REPO_DIR/docker/cloud/data"
+# Navidrome runs as PUID:PGID and cannot create its database in the root-owned dir Docker would make.
+puid=$(env_get PUID); pgid=$(env_get PGID)
+install -d -o "${puid:-1000}" -g "${pgid:-1000}" "$REPO_DIR/docker/media/data/navidrome"
 chown -R "$TVBOX_USER" "$REPO_DIR/docker/net/homepage" 2>/dev/null || true
 
 POOL="$STORAGE_ROOT"

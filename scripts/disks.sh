@@ -175,8 +175,15 @@ mount_pool() {
   pool_mounted && return 0
   mkdir -p "$LANDING_DIR" "$STORAGE_ROOT"
   run chattr -i "$STORAGE_ROOT" 2>/dev/null || true
+  # mergerfs daemonizes. Started straight from a oneshot unit (tvbox-storage.service, tvbox-firstboot.service)
+  # it stays in that unit's cgroup and systemd kills it when the unit ends: the pool mounted and was gone a
+  # second later (every app then wrote into a plain /mnt/pool on the SSD). A transient scope keeps it alive.
+  local sysrun="${TVBOX_SYSTEMD_RUN:-systemd-run}" launch=()
+  if [ "$DRY" != 1 ] && [ -d "${TVBOX_SYSTEMD_DIR:-/run/systemd/system}" ] && command -v "$sysrun" >/dev/null 2>&1; then
+    launch=("$sysrun" --quiet --scope --description="tvbox pool (mergerfs)")
+  fi
   # ff: first branch with room wins -> the SSD landing dir. minfreespace guards the SSD floor.
-  run mergerfs -o "allow_other,use_ino,cache.files=partial,dropcacheonclose=true,category.create=ff,moveonenospc=true,minfreespace=$MIN_FREE,fsname=tvbox-pool" \
+  run "${launch[@]}" mergerfs -o "allow_other,use_ino,cache.files=partial,dropcacheonclose=true,category.create=ff,moveonenospc=true,minfreespace=$MIN_FREE,fsname=tvbox-pool" \
     "$LANDING_DIR" "$STORAGE_ROOT" || die "mergerfs mount failed"
   ok "pool mounted at $STORAGE_ROOT (SSD landing: $LANDING_DIR)"
 }

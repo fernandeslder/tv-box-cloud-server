@@ -35,7 +35,8 @@ cmd_doctor() {
   chk "SSD below 85% full" bash -c "[ \$(df --output=pcent '$LANDING_DIR' | tail -n1 | tr -dc 0-9) -lt 85 ]" || bad=1
   cur="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -n1)"
   chk "LAN IP unchanged ($lan)" test "$cur" = "$lan" || { warn "IP is now $cur: run: sudo tvbox update-ip"; bad=1; }
-  chk "DNS answers locally (Pi-hole)" bash -c "getent ahosts photos.$d >/dev/null && dig +short +time=3 @127.0.0.1 photos.$d | grep -q ." || bad=1
+  # Asks Pi-hole directly: this box's own resolver is the router's (on purpose, so it works before Docker is up).
+  chk "DNS answers locally (Pi-hole)" bash -c "dig +short +time=3 @127.0.0.1 photos.$d | grep -q '$lan'" || bad=1
   chk "HTTPS photos.$d" curl -sk -m 8 -o /dev/null --resolve "photos.$d:443:127.0.0.1" "https://photos.$d/" || bad=1
   chk "HTTPS files.$d" curl -sk -m 8 -o /dev/null --resolve "files.$d:443:127.0.0.1" "https://files.$d/" || bad=1
   chk "SMB (445) listening" bash -c "ss -ltn | grep -q ':445 '" || bad=1
