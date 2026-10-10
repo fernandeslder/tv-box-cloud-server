@@ -1,0 +1,17 @@
+{
+  "_comment": "Tiles added to Steam as non-Steam shortcuts by scripts/tv-steam-shortcuts.py. 'cmd' runs on the HOST through flatpak-spawn (the Steam Flatpak has no other way out of its sandbox). {pc_host} is replaced by pc_host below.",
+  "pc_host": "192.168.2.20",
+  "apps": [
+    {"name": "YouTube",  "art": "youtube",  "tags": ["TV Apps"], "cmd": "flatpak run rocks.shy.VacuumTube"},
+    {"name": "Stremio",  "art": "stremio",  "tags": ["TV Apps"], "cmd": "flatpak run com.stremio.Stremio"},
+    {"name": "Netflix",  "art": "netflix",  "tags": ["TV Apps"], "cmd": "firefox --kiosk https://www.netflix.com"},
+    {"name": "Disney+",  "art": "disney",   "tags": ["TV Apps"], "cmd": "firefox --kiosk https://www.disneyplus.com"},
+    {"name": "Jellyfin", "art": "jellyfin", "tags": ["TV Apps"], "cmd": "flatpak run org.jellyfin.JellyfinDesktop"},
+    {"name": "Music",    "art": "music",    "tags": ["TV Apps"], "cmd": "flatpak run com.github.KRTirtho.Spotube"},
+    {"name": "Web",      "art": "web",      "tags": ["TV Apps"], "cmd": "firefox"},
+    {"name": "Kodi",     "art": "kodi",     "tags": ["TV Apps"], "cmd": "env -u WAYLAND_DISPLAY kodi -fs"},
+    {"name": "PC Games", "art": "pcgames",  "tags": ["TV Apps", "PC Games"],
+     "cmd": "flatpak run com.moonlight_stream.Moonlight stream {pc_host} \"Steam Big Picture\" --4K --fps 60 --video-codec HEVC --video-decoder hardware --bitrate 100000 --audio-config 5.1-surround --no-quit-after"},
+    {"name": "PC Games (Steam Link)", "art": "steamlink", "tags": ["PC Games"], "cmd": "flatpak run com.valvesoftware.SteamLink"}
+  ]
+}

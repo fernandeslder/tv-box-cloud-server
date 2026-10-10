@@ -49,3 +49,17 @@ Kodi is fine as a *player* (run it as its own app), not as the thing that launch
 `flatpak-spawn --host flatpak run <app-id>` (the Steam Flatpak is given `--talk-name=org.freedesktop.Flatpak`).
 `~/.config/autostart/tvbox-steam-bigpicture.desktop` starts it at login (`-tenfoot`); Plasma stays underneath as the fallback.
 `configs/kodi/favourites.xml` is kept as a template if you want Kodi's tiles anyway.
+
+### Apps in Steam Big Picture + "PC Games" streaming tile (2026-10-10)
+`configs/steam/tv-apps.json` lists the tiles; `scripts/tv-steam-shortcuts.py` adds them to Steam as non-Steam shortcuts
+(collection tag **TV Apps**; the streaming tiles also get **PC Games**) with artwork from `configs/steam/art/`.
+Run it on the box after Steam has been started and signed in once, **with Steam closed**:
+```bash
+git -C /opt/tvbox pull --ff-only
+python3 /opt/tvbox/scripts/tv-steam-shortcuts.py --dry-run   # what it would do
+python3 /opt/tvbox/scripts/tv-steam-shortcuts.py             # write (backup: shortcuts.vdf.bak-tvbox)
+```
+- Games live on the PC. The **PC Games** tile runs `moonlight stream <pc> "Steam Big Picture"` (Sunshine on the PC, HEVC, hardware decode),
+  so the PC's own Big Picture is what you browse for games; the box's library only holds the apps.
+  **PC Games (Steam Link)** starts the Steam Link app instead. Edit `pc_host` and the Moonlight flags in the JSON (e.g. `--1080`).
+- Pairing (once): `flatpak run com.moonlight_stream.Moonlight pair <pc-ip>` on the box, enter the printed PIN at https://localhost:47990 (PIN tab) on the PC.
