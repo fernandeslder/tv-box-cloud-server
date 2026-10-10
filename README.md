@@ -17,7 +17,7 @@ or, from a clone: `sudo ./setup.sh`
 
 It asks a handful of questions (domain, TV desktop yes/no, optional extras), **generates every password itself**, detects and formats your blank USB disks after you type `ERASE`, installs Docker, starts everything, and prints one address to open on your phone: `https://setup.<your-domain>` (app links, QR codes, network-drive instructions).
 
-Zero-touch from a USB stick you already own (no reformat): [`autoinstall/build-usb.sh`](autoinstall/README.md). Flash guide: [`docs/01-flash-guide.md`](docs/01-flash-guide.md). OS: **Ubuntu Server 26.04.1 LTS** (24.04 also works).
+Zero-touch from a USB stick you already own (no reformat): [`autoinstall/build-usb.sh`](autoinstall/README.md). Flash guide: [`docs/01-flash-guide.md`](docs/01-flash-guide.md). OS: **Ubuntu Server 26.04.1 LTS** (24.04 also works), or **CachyOS** (Arch) via `autoinstall/build-usb-arch.sh` + `arch-install.sh` ([`autoinstall/README.md`](autoinstall/README.md)).
 
 ## Day to day
 
@@ -56,7 +56,7 @@ configs/                   systemd units (templated), Samba, SSH, router.conf.ex
 backups/                   restic backup + restore + weekly restore test (verify.sh)
 clients/                   Windows / Mac / Linux "connect me" helpers
 legion/                    one-command setup for the GPU worker (Windows + CachyOS)
-autoinstall/               unattended Ubuntu install: seed + one-stick USB builder (build-usb.sh)
+autoinstall/               unattended install: Ubuntu seed + one-stick builder (build-usb.sh); CachyOS/Arch (build-usb-arch.sh, arch-install.sh)
 tests/                     bats suite (also runs in CI)
 docs/                      the full plan; start with 00-overview.md
 ```

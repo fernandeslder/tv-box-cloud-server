@@ -1,4 +1,4 @@
-# Zero-touch install (Ubuntu Server 26.04 LTS autoinstall)
+# Zero-touch install (Ubuntu Server 26.04 LTS autoinstall; CachyOS/Arch route below)
 
 Goal: boot the installer USB, confirm **one** screen (the disk), walk away. The box installs the OS,
 powers off, and on first boot sets everything up by itself from the repo bundle that sits on the stick.
@@ -8,6 +8,9 @@ Files here:
 - `make-seed.sh` — fills the autoinstall template (`user-data`) and builds `seed/` (used by `build-usb.sh`; also runnable alone).
 - `user-data` — the autoinstall template (placeholders filled by `make-seed.sh`).
 - `meta-data` — required by cloud-init, intentionally trivial.
+- `build-usb-arch.sh` — CachyOS (Arch) stick builder: loopback-boots the ISO on an existing FAT32/GRUB stick.
+- `arch-install.sh` — scripted CachyOS install; run as root from the live ISO over SSH.
+- `arch/` — helpers it sources: `disk.sh`, `packages.sh`, `chroot.sh`.
 
 ## What a human still has to do (honest list)
 1. Build the stick (below) — the password is typed by you, only its hash is stored.
@@ -98,6 +101,25 @@ ls /var/lib/tvbox-firstboot.done # exists = finished OK
 sudo systemctl start tvbox-firstboot   # re-run after fixing a failure
 ```
 `tvbox.local` needs mDNS (built into macOS/Linux/Windows 10+). If it doesn't resolve, use the IP from the router.
+
+## CachyOS (Arch) route
+For CachyOS there is no subiquity seed: the ISO is loopback-booted from the stick and the install itself is scripted.
+
+**1. Build the stick** — an already-mounted FAT32 stick that has `boot/grub/grub.cfg` (a stick made by `build-usb.sh` keeps working):
+```bash
+autoinstall/build-usb-arch.sh --iso ~/Downloads/cachyos-*-x86_64.iso --target /mnt/usb   # [--sha256 HEX] [--yes]
+```
+It verifies the ISO (`--sha256`, or the `SHA256SUMS`/`SHA256` beside it), copies it to `cachyos/cachyos.iso` (loopback-booted, never extracted; FAT32 holds at most 4 GiB per file), detects the kernel/initramfs/microcode paths inside the ISO, and inserts a first GRUB entry **"CachyOS installer (TV box)"** into `boot/grub/grub.cfg`, keeping every existing entry and file. A stick carrying `md5sum.txt` gets it refreshed (the installer verifies the medium). Re-running is safe.
+
+**2. Install** — boot the stick (`F12`, UEFI), SSH into the live ISO **as root**, and run `arch-install.sh` (from a clone of this repo; it needs its `arch/` helpers next to it):
+```bash
+TVBOX_WIFI_PASS='...' arch-install.sh --disk /dev/nvme0n1 --confirm-wipe /dev/nvme0n1 \
+    --password-hash-file ~/.config/tvbox/password-hash --ssh-key-file ~/.ssh/tvbox_ed25519.pub \
+    --user tvbox --wifi-ssid 'MyWifi' [--bundle tvbox.bundle] [--env-file tvbox-seed.env] [--dry-run]
+```
+Safety mirrors the Ubuntu route: nothing touches a disk unless `--confirm-wipe` names the very same device as `--disk`; removable/USB disks and the disk the running live system sits on are refused; `--dry-run` prints every command; the password hash (first line of the file, a `$6$` sha-512 crypt hash) and the Wi-Fi password travel in exported variables only — never on a command line.
+
+What it does: enables the CachyOS repos, partitions the disk (GPT: 1 GiB EFI System Partition + btrfs labelled `tvbox` with subvolumes `@`, `@home`, `@var-log`, `@snapshots`, mounted `noatime,compress=zstd:1,space_cache=v2`), `pacstrap`s the base (`base`, `linux-cachyos` + headers, `amd-ucode`, `btrfs-progs`, `networkmanager`, `openssh`, `sudo`, `git`, `curl`, …; `nvidia-open-dkms` when `TVBOX_GPU=nvidia`), writes `fstab`, then runs `chroot.sh` inside `arch-chroot`: timezone/locale/keymap, hostname, the user (wheel, key-only SSH), the authorised key, Wi-Fi as a NetworkManager keyfile (mode 600), `systemd-boot` (entry `tvbox`, `root=LABEL=tvbox rootflags=subvol=@`), and a `tvbox-firstboot.service` that on first boot clones `/opt/tvbox` from the bundle (falling back to downloading `bootstrap.sh`) and runs it with `TVBOX_NONINTERACTIVE=1` — the same setup as the Ubuntu path, same `/var/log/tvbox-firstboot.log` and `/var/lib/tvbox-firstboot.done` marker. The desktop is Plasma Bigscreen (`plasma-bigscreen-wayland`; set `TVBOX_SESSION=plasma` to autologin into the plain Plasma desktop), with Steam (native, `[multilib]`), Sunshine and Moonlight among the optional packages. The repo's scripts are distro-aware (`PKG_FAMILY` = `debian`|`arch`), so `bootstrap.sh`/`setup.sh` run unchanged on the installed system.
 
 ## Not verified on real hardware
 Written and unit-tested without a real install: `tests/usb.bats` builds a stick from a fake ISO that has the real
