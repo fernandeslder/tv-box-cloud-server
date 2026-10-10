@@ -1,8 +1,8 @@
 # RUNS ON THE LEGION 7 (RTX 4080 12GB), NOT on tvbox. Connected via Tailscale.
 # Normally started for you by legion/setup-linux.sh / legion/setup-windows.ps1.
 # Manual run (from this directory):
-#   IMMICH_VERSION=v3.2.4 docker compose --profile photos --profile audio up -d
-#   (or put IMMICH_VERSION=v3.2.4 in a .env next to this file)
+#   IMMICH_VERSION=v3.3.1 docker compose --profile photos --profile audio up -d
+#   (or put IMMICH_VERSION=v3.3.1 in a .env next to this file)
 # Profiles: photos = Immich ML :3003 | audio = whisper :9000 |
 #           ollama = containerised Ollama :11434 (NOT needed: Ollama runs natively).
 # Setup walkthrough: docs/10-legion-ai-server.md
@@ -15,7 +15,7 @@
 services:
   immich-machine-learning:
     profiles: ["photos"]
-    # ${IMMICH_VERSION}-cuda tracks the TV box variable: v3.2.4 -> v3.2.4-cuda,
+    # ${IMMICH_VERSION}-cuda tracks the TV box variable: v3.3.1 -> v3.3.1-cuda,
     # release -> release-cuda. Both aliases are published upstream.
     image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:?set IMMICH_VERSION}-cuda
     restart: unless-stopped

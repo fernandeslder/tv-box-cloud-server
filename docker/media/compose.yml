@@ -5,7 +5,7 @@
 services:
   jellyfin:
     profiles: ["media"]
-    image: jellyfin/jellyfin:10
+    image: jellyfin/jellyfin:12.2
     restart: unless-stopped
     group_add:
       - "${VIDEO_GID:-44}"
@@ -24,7 +24,7 @@ services:
 
   navidrome:
     profiles: ["media"]
-    image: deluan/navidrome:latest
+    image: deluan/navidrome:0.64.2
     restart: unless-stopped
     user: "${PUID:-1000}:${PGID:-1000}"
     environment:
@@ -41,7 +41,7 @@ services:
 
   audiobookshelf:
     profiles: ["media"]
-    image: ghcr.io/advplyr/audiobookshelf:latest
+    image: ghcr.io/advplyr/audiobookshelf:2.37.1
     restart: unless-stopped
     volumes:
       - ${STORAGE_ROOT:-/mnt/pool}/media/audiobooks:/audiobooks
@@ -53,7 +53,7 @@ services:
 
   gluetun:
     profiles: ["torrent"]
-    image: qmcgaw/gluetun:v3.41
+    image: qmcgaw/gluetun:v3.41.3
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
@@ -73,7 +73,7 @@ services:
 
   qbittorrent:
     profiles: ["torrent"]
-    image: lscr.io/linuxserver/qbittorrent:latest
+    image: lscr.io/linuxserver/qbittorrent:5.2.4
     restart: unless-stopped
     # Everything (incl. the web UI) runs inside gluetun's network namespace = kill-switch.
     network_mode: service:gluetun
