@@ -93,6 +93,9 @@ arch_disk_prepare() {  # arch_disk_prepare <dev> <mnt>
   run sgdisk --zap-all "$dev"
   run sgdisk --new=1:0:+1G --typecode=1:EF00 --change-name=1:EFI "$dev"
   run sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:tvbox "$dev"
+  # let the kernel/udev create the new partition nodes before formatting them
+  run partprobe "$dev"
+  run udevadm settle
   run mkfs.fat -F 32 -n EFI "$esp"
   run mkfs.btrfs -L tvbox "$btrfs_dev"
 
