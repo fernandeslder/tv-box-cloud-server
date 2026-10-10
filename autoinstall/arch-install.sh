@@ -122,6 +122,7 @@ run pacstrap -K "$MOUNT" "${PKGS[@]}"
 # The installed system must keep the CachyOS repos: pacstrap leaves it with the stock pacman.conf, so
 # linux-cachyos and the optimized packages would never update. Copy what the live repo setup produced.
 run install -Dm644 /etc/pacman.conf "$MOUNT/etc/pacman.conf"
+if arch_cpu_has_v3; then arch_use_v3_repos "$MOUNT/etc/pacman.conf"; fi
 for ml in /etc/pacman.d/cachyos*mirrorlist; do
   [ -e "$ml" ] || [ "$DRY" = 1 ] || continue
   run install -Dm644 "$ml" "$MOUNT$ml"

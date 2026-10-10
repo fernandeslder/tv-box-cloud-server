@@ -160,7 +160,8 @@ build() { "$REPO/autoinstall/build-usb-arch.sh" --iso "$T/cachyos.iso" --target 
 }
 
 @test "asks before writing when --yes is not given" {
-  run "$REPO/autoinstall/build-usb-arch.sh" --iso "$T/cachyos.iso" --target "$T/stick"
+  # answer the prompt explicitly: an inherited open stdin would block this test forever
+  run bash -c "'$REPO/autoinstall/build-usb-arch.sh' --iso '$T/cachyos.iso' --target '$T/stick' <<< n"
   [ "$status" -ne 0 ]
   [[ "$output" == *"Continue"* ]]
   [ ! -e "$T/stick/cachyos" ]

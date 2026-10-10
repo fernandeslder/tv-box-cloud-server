@@ -15,7 +15,12 @@ run() { if [ "$DRY" = 1 ]; then echo "DRY: $*"; else "$@"; fi; }
 # script — it detects x86-64-v3/v4/znver4 itself and writes the matching
 # repos into /etc/pacman.conf (and imports the CachyOS keyring).
 arch_enable_cachyos_repos() {
-  local tmp
+  local tmp conf="${TVBOX_PACMAN_CONF:-/etc/pacman.conf}"
+  # the CachyOS live ISO already has the repos: the script would only say "already added"
+  if grep -q '^\[cachyos' "$conf" 2>/dev/null; then
+    echo "CachyOS repositories already configured in $conf"
+    return 0
+  fi
   tmp="$(mktemp -d)"
   run curl -fsSL -o "$tmp/cachyos-repo.tar.xz" "$CACHYOS_REPO_URL"
   run tar -xf "$tmp/cachyos-repo.tar.xz" -C "$tmp"
@@ -60,4 +65,23 @@ arch_base_packages() {
     pkgs+=(nvidia-open-dkms)
   fi
   printf '%s\n' "${pkgs[@]}"
+}
+
+# x86-64-v3 (AVX2) CPUs get CachyOS's optimized builds. The live ISO ships only the generic [cachyos] repo.
+arch_cpu_has_v3() {
+  "${TVBOX_LD_SO:-/lib64/ld-linux-x86-64.so.2}" --help 2>/dev/null | grep -q 'x86-64-v3 (supported'
+}
+
+# arch_use_v3_repos <pacman.conf>: put the three -v3 repos above [core] (idempotent).
+arch_use_v3_repos() {
+  local conf="$1" tmp
+  grep -q '^\[cachyos-v3\]' "$conf" 2>/dev/null && return 0
+  if [ "$DRY" = 1 ]; then echo "DRY: add [cachyos-v3] [cachyos-core-v3] [cachyos-extra-v3] above [core] in $conf"; return 0; fi
+  tmp="$(mktemp)"
+  awk '/^\[core\]/ && !done {
+         n = split("cachyos-v3 cachyos-core-v3 cachyos-extra-v3", r, " ")
+         for (i = 1; i <= n; i++) printf "[%s]\nInclude = /etc/pacman.d/cachyos-v3-mirrorlist\n\n", r[i]
+         done = 1 }
+       { print }' "$conf" > "$tmp" && cat "$tmp" > "$conf"
+  rm -f "$tmp"
 }

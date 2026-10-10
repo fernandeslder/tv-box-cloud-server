@@ -20,12 +20,14 @@ nvidia_packages() {
 
 dry_repos() {
   export TVBOX_DRY_RUN=1
+  export TVBOX_PACMAN_CONF=/nonexistent   # independent of the host's /etc/pacman.conf
   . "$REPO/autoinstall/arch/packages.sh"
   arch_enable_cachyos_repos
 }
 
 live_repos() {
-  export PATH="$T/bin:$PATH" CALLS="$T/calls"
+  export PATH="$T/bin:$PATH" CALLS="$T/calls" TVBOX_PACMAN_CONF=/nonexistent
+  unset TVBOX_DRY_RUN   # live mode: the fakes on PATH record the calls
   . "$REPO/autoinstall/arch/packages.sh"
   arch_enable_cachyos_repos
 }
@@ -90,4 +92,18 @@ EOF
   # the fake bash only ever saw the cd into the extracted dir plus the script
   grep -qF "cd '" "$T/calls"
   grep -qF "/cachyos-repo' && ./cachyos-repo.sh" "$T/calls"
+}
+
+@test "repos are not re-added when the live system already has them" {
+  mk_tmp; printf '[options]\n[cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n[core]\n' > "$T/pacman.conf"
+  TVBOX_PACMAN_CONF="$T/pacman.conf" TVBOX_DRY_RUN=1 run bash -c ". '$REPO/autoinstall/arch/packages.sh'; arch_enable_cachyos_repos"
+  [ "$status" -eq 0 ]; [[ "$output" == *"already configured"* ]]; [[ "$output" != *"DRY: curl"* ]]
+}
+@test "v3 repos are inserted above [core], once" {
+  mk_tmp; printf '[options]\nHoldPkg = pacman\n\n[cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n\n[core]\nInclude = /etc/pacman.d/mirrorlist\n' > "$T/pacman.conf"
+  run env -u TVBOX_DRY_RUN bash -c ". '$REPO/autoinstall/arch/packages.sh'; arch_use_v3_repos '$T/pacman.conf'; arch_use_v3_repos '$T/pacman.conf'"
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^\[cachyos-v3\]' "$T/pacman.conf")" -eq 1 ]
+  [ "$(grep -n '^\[cachyos-v3\]' "$T/pacman.conf" | cut -d: -f1)" -lt "$(grep -n '^\[core\]' "$T/pacman.conf" | cut -d: -f1)" ]
+  grep -q '^\[cachyos-extra-v3\]' "$T/pacman.conf"
 }
