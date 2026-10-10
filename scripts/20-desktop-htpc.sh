@@ -11,7 +11,7 @@ apt_install plasma-desktop plasma-session-wayland sddm kodi \
 # Ubuntu/Debian split Kodi's official add-on repository into its own package; without it Kodi has no
 # "Get more..." (no skins, no add-ons from the repository).
 apt_install_optional kodi-repository-kodi
-apt_install_optional sddm-theme-breeze plasma-nm plasma-pa powerdevil kscreen xdg-desktop-portal-kde fonts-noto-core
+apt_install_optional sddm-theme-breeze plasma-nm plasma-pa powerdevil kscreen xdg-desktop-portal-kde fonts-noto-core konsole
 apt_install_optional kodi-pvr-iptvsimple kodi-inputstream-adaptive kodi-peripheral-joystick firefox mpv \
   cec-utils flatpak pipewire wireplumber bluetooth bluez
 have flatpak && flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
