@@ -12,6 +12,9 @@ if [ "${PKG_FAMILY:-debian}" = arch ]; then
     smartmontools restic rclone samba avahi nss-mdns qrencode ufw htop \
     python tesseract poppler ffmpeg openssl unzip binutils bind iproute2 imagemagick
   pkg_install fuse3
+  # Debian-isms the rest of the repo relies on: the shared "www-data" group (gid 33, Nextcloud's group inside its
+  # container; the Samba shares and the ingest/ai-queue units name it). Arch calls gid 33 "http", so add the alias.
+  getent group www-data >/dev/null 2>&1 || groupadd -o -g 33 www-data
   pkg_install_optional wsdd2
   # mergerfs is AUR-only on Arch/CachyOS: without it disks.sh cannot mount the pool. Use the upstream static
   # release (same idea as the yt-dlp binary); TVBOX_LOCAL_PREFIX relocates it for tests.

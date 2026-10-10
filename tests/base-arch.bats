@@ -47,7 +47,9 @@ case "$url" in
 esac
 exit 1
 FAKE
-  chmod +x "$T/bin/pacman" "$T/bin/apt-get" "$T/bin/systemctl" "$T/bin/hostnamectl" "$T/bin/curl"
+  printf '#!/bin/sh\nexit 2\n' > "$T/bin/getent"                          # no www-data group yet
+  printf '#!/bin/sh\necho "groupadd $*" >> "$PACMAN_LOG"\n' > "$T/bin/groupadd"
+  chmod +x "$T/bin/pacman" "$T/bin/apt-get" "$T/bin/systemctl" "$T/bin/hostnamectl" "$T/bin/curl" "$T/bin/getent" "$T/bin/groupadd"
   export TVBOX_LOCAL_PREFIX="$T/local"
   export PACMAN_LOG="$T/pacman.log" APT_LOG="$T/apt.log"
   : >"$PACMAN_LOG"; : >"$APT_LOG"
@@ -87,4 +89,10 @@ teardown() { rm -rf "$T"; }
   PKG_FAMILY=arch PATH="$T/bin:$PATH" run bash "$REPO/scripts/10-base.sh"
   [ "$status" -eq 0 ] || { echo "$output"; false; }
   [[ "$output" == *"could not install mergerfs"* ]]
+}
+
+@test "arch: the www-data group (gid 33) is created as an alias of http, since the repo names it" {
+  PKG_FAMILY=arch PATH="$T/bin:$PATH" run bash "$REPO/scripts/10-base.sh"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  grep -qx 'groupadd -o -g 33 www-data' "$PACMAN_LOG"
 }
