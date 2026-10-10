@@ -47,7 +47,7 @@ case "$url" in
 esac
 exit 1
 FAKE
-  printf '#!/bin/sh\nexit 2\n' > "$T/bin/getent"                          # no www-data group yet
+  printf '#!/bin/sh\n[ "$1" = group ] && [ "$2" = www-data ] && exit 2   # no www-data group yet\nexec /usr/bin/getent "$@"\n' > "$T/bin/getent"
   printf '#!/bin/sh\necho "groupadd $*" >> "$PACMAN_LOG"\n' > "$T/bin/groupadd"
   chmod +x "$T/bin/pacman" "$T/bin/apt-get" "$T/bin/systemctl" "$T/bin/hostnamectl" "$T/bin/curl" "$T/bin/getent" "$T/bin/groupadd"
   export TVBOX_LOCAL_PREFIX="$T/local"
