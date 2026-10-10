@@ -6,7 +6,8 @@ Pattern: **Plasma desktop + Kodi 21 fullscreen as 10-foot home + standalone Flat
 ```bash
 flatpak install flathub org.xbmc.kodi com.moonlight_stream.Moonlight \
   com.stremio.Stremio rocks.shy.VacuumTube io.freetubeapp.FreeTube \
-  app.iptvnator.IPTVnator com.github.KRTirtho.Spotube org.jellyfin.JellyfinDesktop
+  com.github.KRTirtho.Spotube org.jellyfin.JellyfinDesktop
+# IPTVnator: the Flathub id could not be confirmed (2026-10-10) -> find it with:  flatpak search iptv
 sudo apt install -y hypnotix firefox mpv yt-dlp
 ```
 
