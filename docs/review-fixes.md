@@ -108,3 +108,5 @@ Found from photos of the installer crash screen on the T14s:
   greeter compositor; `sddm-theme-breeze` and a few Plasma applets (network, audio, power, display) are installed best-effort.
 - **Two-minute boot delay.** netplan's `systemd-networkd-wait-online` drop-in waited for the unplugged onboard Ethernet port.
   A drop-in now waits for any one link (30 s cap).
+- **Kodi had no "Get more..." (2026-10-10).** On Ubuntu the official add-on repository is the separate package `kodi-repository-kodi`; it
+  was never installed, so no skins/add-ons could be fetched from inside Kodi. Now installed by `20-desktop-htpc.sh`.

@@ -27,3 +27,6 @@ load helpers
   grep -q -- '--any' "$REPO/configs/systemd/networkd-wait-any.conf"
   grep -q 'networkd-wait-any.conf' "$REPO/scripts/50-network-dns.sh"
 }
+@test "desktop: Kodi's official add-on repository package is installed (else no skins / Get more)" {
+  grep -q 'apt_install_optional kodi-repository-kodi' "$REPO/scripts/20-desktop-htpc.sh"
+}
