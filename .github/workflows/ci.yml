@@ -23,6 +23,24 @@ jobs:
       - name: Unit + config tests (shellcheck, compose config, Caddy, mover, backup+restore test, SMART, USB builder, wizard, cloudflare mock...)
         run: bats tests
 
+  arch:
+    # Same suite on Arch (pacman), so the installer stays honest on both families.
+    runs-on: ubuntu-24.04
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Update package databases
+        run: pacman -Syu --noconfirm
+      - name: Install test dependencies (xorriso is packaged as libisoburn on Arch)
+        run: pacman -S --noconfirm --needed git bats shellcheck unzip python restic libisoburn libarchive curl caddy docker-compose
+      - name: Mark the workspace safe for the container's git user
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # the USB builder bundles the repo history
+      - name: Unit + config tests
+        run: bats tests
+
   images:
     # Online check that every pinned image tag still exists (a missing tag only shows up on the box).
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

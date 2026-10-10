@@ -12,7 +12,13 @@ OWNER="${SUDO_USER:-${TVBOX_USER:-}}"
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 [ -n "$OWNER" ] && [ "$OWNER" != root ] || OWNER="$(getent passwd | awk -F: '$3>=1000 && $3<60000 && $7 !~ /nologin|false/ {print $1; exit}')"
 [ -n "$OWNER" ] || { echo "no normal user account found"; exit 1; }
-command -v git >/dev/null 2>&1 || { apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y git curl ca-certificates; }
+command -v git >/dev/null 2>&1 || {
+  if command -v pacman >/dev/null 2>&1; then
+    pacman -S --noconfirm --needed git curl ca-certificates
+  else
+    apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y git curl ca-certificates
+  fi
+}
 BUNDLE="${TVBOX_BUNDLE:-}"
 if [ -d "$DIR/.git" ]; then
   if [ -z "${TVBOX_NO_PULL:-}" ]; then

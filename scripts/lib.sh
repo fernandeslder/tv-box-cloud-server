@@ -20,20 +20,63 @@ ok()   { _c 32; printf '  ✓ %s\n' "$*" >&2; _c 0; }
 warn() { _c 33; printf '  ! %s\n' "$*" >&2; _c 0; }
 die()  { _c 31; printf '  ✗ %s\n' "$*" >&2; _c 0; exit 1; }
 need_root() { [ "$(id -u)" -eq 0 ] || [ -n "${TVBOX_TEST_NOROOT:-}" ] || die "run with sudo: sudo $0 $*"; }
-apt_install() { DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"; }
-have() { command -v "$1" >/dev/null 2>&1; }
+# Package family: "debian" (apt-get) or "arch" (pacman). Detected from
+# /etc/os-release (TVBOX_OS_RELEASE points at another file, for tests);
+# PKG_FAMILY overrides the detection.
+_os_release_val() {  # _os_release_val KEY FILE
+  local v
+  v="$(grep -m1 -E "^$1=" "$2" 2>/dev/null || true)"
+  v="${v#*=}"; v="${v//\"/}"
+  printf '%s' "$v"
+}
+detect_pkg_family() {
+  if [ -n "${PKG_FAMILY:-}" ]; then printf '%s' "$PKG_FAMILY"; return 0; fi
+  local release="${TVBOX_OS_RELEASE:-/etc/os-release}" os
+  os=" $(_os_release_val ID "$release") $(_os_release_val ID_LIKE "$release") "
+  case "$os" in
+    *arch*|*cachyos*) printf 'arch'; return 0 ;;
+    *ubuntu*|*debian*) printf 'debian'; return 0 ;;
+  esac
+  if command -v pacman >/dev/null 2>&1; then printf 'arch'
+  elif command -v apt-get >/dev/null 2>&1; then printf 'debian'
+  else die "neither apt-get nor pacman found: cannot install packages"
+  fi
+}
+PKG_FAMILY="$(detect_pkg_family)"
+
+pkg_install() {  # install required packages (non-interactive; dies on failure)
+  case "${PKG_FAMILY:-debian}" in
+    arch) pacman -S --noconfirm --needed "$@" ;;
+    *)    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@" ;;
+  esac
+}
+pkg_available() {  # exit 0 if the package exists in the repos
+  case "${PKG_FAMILY:-debian}" in
+    arch) pacman -Si "$1" >/dev/null 2>&1 ;;
+    *)    apt-cache show "$1" >/dev/null 2>&1 ;;
+  esac
+}
+pkg_update() {  # refresh package databases
+  case "${PKG_FAMILY:-debian}" in
+    arch) pacman -Sy --noconfirm ;;
+    *)    apt-get update -qq ;;
+  esac
+}
 # Install each package on its own so one name missing from this release (they get merged/renamed
-# between Ubuntu/Debian versions) never blocks the rest. Returns 0 even when some are unavailable.
-apt_install_optional() {
+# between releases) never blocks the rest. Returns 0 even when some are unavailable.
+pkg_install_optional() {
   local p
   for p in "$@"; do
-    if apt-cache show "$p" >/dev/null 2>&1; then
-      apt_install "$p" || warn "could not install optional package $p"
+    if pkg_available "$p"; then
+      pkg_install "$p" || warn "could not install optional package $p"
     else
       warn "package $p does not exist on this release: skipped"
     fi
   done
 }
+apt_install() { pkg_install "$@"; }
+apt_install_optional() { pkg_install_optional "$@"; }
+have() { command -v "$1" >/dev/null 2>&1; }
 
 # The human who owns the box: whoever ran sudo, else the first normal user.
 detect_user() {
