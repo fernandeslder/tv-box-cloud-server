@@ -99,3 +99,12 @@ Found from photos of the installer crash screen on the T14s:
 - **`STORAGE_ROOT` test override was ignored** by `lib.sh` (the other path variables honoured theirs); fixed, with two tests.
 - Expected on a fresh box with no HDDs/tokens: "Tailscale connected" and "last backup" FAIL until you run
   `tailscale up` / add a backup disk.
+
+## Fifth pass: first reboot into the desktop (2026-10-10)
+- **No desktop after boot.** `plasma-session-wayland` (the package that ships `wayland-sessions/plasma.desktop`) is only a
+  Recommends of `plasma-desktop`, and `apt_install` uses `--no-install-recommends`; SDDM then found no Plasma session. Plasma 6
+  here is Wayland-only (no Xorg), but SDDM defaults to X11 and a `weston` greeter compositor, so it tried `/usr/bin/X`.
+  Now: `plasma-session-wayland` is a required package; `/etc/sddm.conf.d/10-tvbox.conf` sets `DisplayServer=wayland` with KWin as the
+  greeter compositor; `sddm-theme-breeze` and a few Plasma applets (network, audio, power, display) are installed best-effort.
+- **Two-minute boot delay.** netplan's `systemd-networkd-wait-online` drop-in waited for the unplugged onboard Ethernet port.
+  A drop-in now waits for any one link (30 s cap).

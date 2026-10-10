@@ -17,3 +17,13 @@ load helpers
   cd "$REPO"; for f in docker/.env configs/router.conf configs/router.managed.conf docker/ml-laptop/.env docker/net/data/x; do git check-ignore -q "$f" || { echo "$f not ignored"; false; }; done
 }
 @test "all scripts bash -n" { cd "$REPO"; for f in scripts/*.sh scripts/tvbox backups/*.sh setup.sh bootstrap.sh; do bash -n "$f"; done; }
+@test "desktop: a Plasma session file is installed and SDDM is told to use Wayland + KWin (no Xorg here)" {
+  grep -q 'apt_install plasma-desktop plasma-session-wayland' "$REPO/scripts/20-desktop-htpc.sh"
+  grep -q 'DisplayServer=wayland' "$REPO/scripts/20-desktop-htpc.sh"
+  grep -q 'CompositorCommand=kwin_wayland' "$REPO/scripts/20-desktop-htpc.sh"
+  grep -q 'Session=plasma.desktop' "$REPO/scripts/20-desktop-htpc.sh"
+}
+@test "boot does not wait for NICs that are unplugged" {
+  grep -q -- '--any' "$REPO/configs/systemd/networkd-wait-any.conf"
+  grep -q 'networkd-wait-any.conf' "$REPO/scripts/50-network-dns.sh"
+}

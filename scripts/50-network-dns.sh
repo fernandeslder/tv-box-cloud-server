@@ -9,6 +9,12 @@ if [ -d /run/systemd/resolve ]; then
   systemctl restart systemd-resolved || true
 fi
 
+# Do not hold the boot for NICs that are not plugged in (see the conf for why).
+install -d /etc/systemd/system/systemd-networkd-wait-online.service.d
+install -m644 "$REPO_DIR/configs/systemd/networkd-wait-any.conf" \
+  /etc/systemd/system/systemd-networkd-wait-online.service.d/tvbox-any.conf
+systemctl daemon-reload || true
+
 # Firewall: LAN + Tailscale in, everything else out of reach. Private ranges only, so
 # a wrong LAN guess can never lock you out of SSH on the same network.
 if [ "$(env_get TVBOX_FIREWALL yes)" = yes ] && have ufw; then
