@@ -36,6 +36,19 @@ Boot the USB (UEFI entry) → `Try or Install Ubuntu Server`, then:
 - **Reboot** and remove the USB when asked.
 - **Connect:** `ssh <user>@tvbox.local` (or the IP from your router) and continue below.
 
+## Option C — CachyOS (Arch)
+Same one-stick idea, but the OS install is scripted instead of subiquity.
+
+1. `autoinstall/build-usb-arch.sh --iso cachyos-*-x86_64.iso --target /mnt/usb [--sha256 HEX] [--yes]` copies the ISO onto the mounted FAT32 stick as `cachyos/cachyos.iso` (loopback-booted, never extracted) and puts a GRUB entry **"CachyOS installer (TV box)"** first in `boot/grub/grub.cfg`. The stick keeps its filesystem and files; the ISO is checksum-verified, the kernel/initramfs/microcode paths are detected inside the ISO, and the stick must already have `boot/grub/grub.cfg` (one FAT32 file cannot exceed 4 GiB).
+2. Boot the stick (`F12`, UEFI), pick the CachyOS entry, then SSH into the live ISO **as root** and run `arch-install.sh` from a clone of this repo (it needs its `arch/` helpers next to it):
+```bash
+TVBOX_WIFI_PASS='...' arch-install.sh --disk /dev/nvme0n1 --confirm-wipe /dev/nvme0n1 \
+    --password-hash-file ~/.config/tvbox/password-hash --ssh-key-file ~/.ssh/tvbox_ed25519.pub \
+    --user tvbox --wifi-ssid 'MyWifi' [--bundle tvbox.bundle] [--env-file tvbox-seed.env] [--dry-run]
+```
+   Nothing touches a disk unless `--confirm-wipe` names the same device as `--disk`; removable/USB disks and the live system's own disk are refused. It writes GPT + a 1 GiB EFI partition + btrfs (subvolumes `@`, `@home`, `@var-log`, `@snapshots`), pacstraps the base with `linux-cachyos` and `amd-ucode`, and configures the chroot: hostname, user (wheel, key-only SSH), timezone, keymap, Wi-Fi and systemd-boot. `--dry-run` prints every command; the password hash and Wi-Fi password travel in variables, never on a command line.
+3. First boot runs `bootstrap.sh` exactly like the Ubuntu path (`tvbox-firstboot.service`, same log and done-marker). The desktop is Plasma Bigscreen by default — set `TVBOX_SESSION=plasma` for the plain Plasma session; Steam (native), Sunshine and Moonlight install as optional extras.
+
 ## Run the setup
 ```bash
 sudo apt update && sudo apt install -y git curl   # only if missing
@@ -48,7 +61,7 @@ This clones the repo to `/opt/tvbox` and starts the wizard (20-40 min, mostly do
 Human steps that always remain: confirm the install disk, approve the Tailscale subnet route + Split DNS, reserve the box's IP in the router and point the router's DNS at it (`docs/05`, `docs/08`).
 
 ## OS choice
-**Ubuntu Server 26.04.1 LTS is recommended**: supported to 2031, current kernel/Mesa for the Ryzen iGPU, and Docker, Plasma 6, Kodi 21 and mergerfs are all packaged. Ubuntu 24.04 LTS, Debian 13 and Linux Mint 22 also work with the same setup (autoinstall is Ubuntu-only; use Option B there). Never an immutable/image-based OS: the scripts expect a normal, changeable apt system.
+**Ubuntu Server 26.04.1 LTS is recommended**: supported to 2031, current kernel/Mesa for the Ryzen iGPU, and Docker, Plasma 6, Kodi 21 and mergerfs are all packaged. Ubuntu 24.04 LTS, Debian 13 and Linux Mint 22 also work with the same setup (autoinstall is Ubuntu-only; use Option B there), and **CachyOS** (Arch) has its own scripted autoinstall (Option C). Never an immutable/image-based OS: the scripts expect a normal, changeable package-managed system.
 
 ## If you ever re-flash
 Data survives on the USB disks. Recovery = install the OS, run the setup again (disks labelled `tvbox-*` are re-adopted automatically, not reformatted), then `tvbox restore databases` (`docs/08`).

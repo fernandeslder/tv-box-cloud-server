@@ -15,7 +15,7 @@
 ## Architecture
 
 ```
-TV <-HDMI- [TV BOX]  Ubuntu Server 26.04 LTS + (optional) Plasma/Kodi
+TV <-HDMI- [TV BOX]  Ubuntu Server 26.04 LTS (or CachyOS/Arch) + (optional) Plasma/Kodi
   SSD (NVMe)  /mnt/cache   DBs, thumbnails, transcodes, landing/ (write cache)
   USB HDDs    /mnt/hdd/*   data disk(s) + a dedicated backup disk, mounted by UUID
   mergerfs    /mnt/pool    = landing (SSD) + data HDD(s). New writes -> SSD. mover.sh -> HDD.
@@ -45,7 +45,10 @@ Legion (GPU): Ollama (Jev judge, vision), whisper, Immich ML CUDA  -- over Tails
 6. OS = **Ubuntu Server 26.04.1 LTS** (kernel 7.0, Mesa 26, Plasma 6.6, Kodi 21, mergerfs 2.40, restic 0.18; supported to 2031).
    Chosen over 24.04 (Kodi 20/Plasma 5.27, still fully supported by the installer) after checking that every apt package
    the installer asks for exists on 26.04 and that Docker's repo has a `resolute` suite. Not an immutable OS, on purpose:
-   the box stays a normal apt system you can change. Debian 13 / Linux Mint 22 / Ubuntu 24.04 work with the same scripts.
+    the box stays a normal apt system you can change. Debian 13 / Linux Mint 22 / Ubuntu 24.04 work with the same scripts.
+
+## CachyOS (Arch) path
+The scripts are distro-aware: `PKG_FAMILY` is `debian` or `arch` (detected from `/etc/os-release`, overridable with the environment variable) and every package goes through `pkg_install` / `pkg_install_optional` / `pkg_available` / `pkg_update` (`apt_install` / `apt_install_optional` remain aliases). On Arch the TV desktop is **Plasma Bigscreen** (`plasma-bigscreen-wayland`; set `TVBOX_SESSION=plasma` to autologin into the plain Plasma desktop), Steam is the native Linux build (via `[multilib]`), and Sunshine/Moonlight are optional extras. The OS itself is installed by `autoinstall/arch-install.sh`, run as root from the CachyOS live ISO over SSH: btrfs subvolumes, systemd-boot, `linux-cachyos`, and a first-boot service that runs `bootstrap.sh` — see `autoinstall/README.md`.
 
 ## Cost policy
 Free > self-hosted > cheap-and-smart > strong. External calls are redacted, transcript-only (~4KB), tiered (`jev` -> free -> value -> strong), and capped monthly. Honest exceptions: NVIDIA driver blob, Tailscale/Cloudflare control planes (proprietary, free tiers), open-weights model licenses.
