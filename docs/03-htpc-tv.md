@@ -63,3 +63,9 @@ python3 /opt/tvbox/scripts/tv-steam-shortcuts.py             # write (backup: sh
   so the PC's own Big Picture is what you browse for games; the box's library only holds the apps.
   **PC Games (Steam Link)** starts the Steam Link app instead. Edit `pc_host` and the Moonlight flags in the JSON (e.g. `--1080`).
 - Pairing (once): `flatpak run com.moonlight_stream.Moonlight pair <pc-ip>` on the box, enter the printed PIN at https://localhost:47990 (PIN tab) on the PC.
+
+**Starting Steam by hand:** run it from inside the desktop session (Konsole/launcher), not from an SSH shell or a text console: the Flatpak
+wrapper refuses to start with "requires a correctly-configured desktop session ... DISPLAY" unless `DISPLAY` is in the D-Bus/systemd activation
+environment. Template for the autostart entry (which imports it first): `configs/steam/tvbox-steam-bigpicture.desktop`
+-> `~/.config/autostart/`. From SSH: `dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XAUTHORITY` (with
+`DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus`), then `systemd-run --user flatpak run com.valvesoftware.Steam -tenfoot`.
