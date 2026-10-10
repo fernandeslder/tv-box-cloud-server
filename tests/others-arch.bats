@@ -94,7 +94,7 @@ teardown() { [ -n "${T:-}" ] && rm -rf "$T" || true; }
 @test "smart-check.sh hints apt off Arch" {
   mk_tmp
   bare_path
-  run env PATH="$T/bin" SMARTCTL="$T/none" TVBOX_STATE="$T/state" \
+  run env PKG_FAMILY=debian PATH="$T/bin" SMARTCTL="$T/none" TVBOX_STATE="$T/state" \
     bash "$REPO/scripts/smart-check.sh"
   [ "$status" -eq 0 ]
   grep -q 'smartctl missing (apt install smartmontools)' <<<"$output"
