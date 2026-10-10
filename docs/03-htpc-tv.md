@@ -38,14 +38,14 @@ sudo apt install -y hypnotix firefox mpv yt-dlp
 ## Mesa note
 Mesa 25 dropped VDPAU — use **VA-API everywhere**.
 
-## One TV interface: Kodi + the FTV skin + app tiles (set up 2026-10-10)
-Goal: a smart-TV-style home (left menu, poster rows, app tiles) instead of a desktop. Kodi stays the home screen; the apps open on top of it and
-closing one drops you back to Kodi.
-- **Skin:** `fTV` ("a skin based on the Fire TV UI", official Kodi 21 repo): Kodi > Settings > Interface > Skin > Skin > Get more > fTV. It pulls
-  its helpers (skinshortcuts, skinvariables, TMDb Helper, ...) by itself. Arctic Horizon 2 is archived and not in the official repo.
-- **App tiles:** `~/.kodi/userdata/favourites.xml` holds `System.Exec("flatpak run <app-id>")` entries (template: `configs/kodi/favourites.xml`;
-  tile pictures go in `~/.kodi/userdata/tvbox-tiles/` and are referenced as `special://masterprofile/tvbox-tiles/<name>.png`). They show under
-  *Favourites* in fTV and can be added to the home screen from the skin's menu editor.
-- **Autostart:** `~/.config/autostart/tvbox-kodi.desktop` (`kodi -fs`) starts Kodi fullscreen at login; Plasma stays underneath as the fallback.
-- **Not an exact copy of the r/kodi concept picture:** that is a mock-up (hero banner, rounded game tiles, weather card). fTV gives the same
-  layout idea; the rest would need a custom skin.
+## One TV interface: Steam Big Picture (2026-10-10; replaces the Kodi-as-launcher attempt)
+**Why not Kodi as the launcher:** on this box Kodi 21.3 (Ubuntu build) crashes in its native Wayland backend when an external app takes the
+screen and gives it back (`wl_display_dispatch_pending: Invalid argument`, journald "Aborted (core dumped)"); forced onto X11
+(`env -u WAYLAND_DISPLAY kodi`) it survives but logs "Failed to restart AudioEngine after return from external player" and loses audio.
+Kodi is fine as a *player* (run it as its own app), not as the thing that launches the other apps.
+
+**What is used instead:** Steam in Big Picture mode (Valve, updated weekly, controller/keyboard/mouse navigation), installed as the user Flatpak
+`com.valvesoftware.Steam` (no i386 multiarch needed). Non-Steam shortcuts launch the host apps via
+`flatpak-spawn --host flatpak run <app-id>` (the Steam Flatpak is given `--talk-name=org.freedesktop.Flatpak`).
+`~/.config/autostart/tvbox-steam-bigpicture.desktop` starts it at login (`-tenfoot`); Plasma stays underneath as the fallback.
+`configs/kodi/favourites.xml` is kept as a template if you want Kodi's tiles anyway.
