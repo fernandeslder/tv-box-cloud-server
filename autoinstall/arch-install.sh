@@ -143,6 +143,11 @@ export TVBOX_HOSTNAME="$HOSTNAME_" TVBOX_USER="$USER_" TVBOX_PASS_HASH="$HASH" \
 [ -z "$WIFI_SSID" ] || [ -n "$TVBOX_WIFI_PASS" ] || echo "warning: --wifi-ssid is set but \$TVBOX_WIFI_PASS is empty" >&2
 run arch-chroot "$MOUNT" /root/chroot.sh
 
+# pacstrap's key setup leaves a gpg-agent running inside the target: it keeps /mnt busy
+run bash -c "gpgconf --homedir '$MOUNT/etc/pacman.d/gnupg' --kill all >/dev/null 2>&1 || true"
+# systemd-boot's NVRAM entry (bootctl inside the chroot cannot always write EFI variables); the removable
+# fallback path \EFI\BOOT\BOOTX64.EFI exists either way. Never fatal.
+run bash -c "command -v efibootmgr >/dev/null 2>&1 && efibootmgr --create --disk '$DISK' --part 1 --loader '\\EFI\\systemd\\systemd-bootx64.efi' --label 'CachyOS (systemd-boot)' >/dev/null 2>&1 || true"
 run umount -R "$MOUNT"
 
 echo "DONE: CachyOS is installed on $DISK."

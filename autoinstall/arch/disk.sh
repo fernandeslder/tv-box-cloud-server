@@ -89,6 +89,16 @@ arch_disk_prepare() {  # arch_disk_prepare <dev> <mnt>
   btrfs_dev="$(part_dev "$dev" 2)"
   opts="noatime,compress=zstd:1,space_cache=v2"
 
+  # Release anything still holding the disk: live systems auto-activate old LVM volume groups and mount
+  # partitions, and wipefs then fails with "Device or resource busy".
+  local part vg
+  while read -r part; do
+    [ -n "$part" ] || continue
+    if findmnt -rn -S "$part" >/dev/null 2>&1; then run umount -R "$part"; fi
+    vg="$(pvs --noheadings -o vg_name "$part" 2>/dev/null | tr -d '[:space:]' || true)"
+    if [ -n "$vg" ]; then run vgchange -an "$vg"; fi
+  done < <(lsblk -lnpo NAME "$dev" 2>/dev/null | tail -n +2)
+
   run wipefs -a "$dev"
   run sgdisk --zap-all "$dev"
   run sgdisk --new=1:0:+1G --typecode=1:EF00 --change-name=1:EFI "$dev"

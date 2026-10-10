@@ -109,3 +109,26 @@ prepare() {  # prepare <dev> — dry-run with the wipe confirmed for <dev>
   [[ "$output" == *"running live system"* ]]
   [[ "$output" != *"DRY:"* ]]
 }
+
+@test "a disk held by an active LVM volume group / mounted partition is released before wiping" {
+  mk_tmp; mkdir -p "$T/bin"
+  cat > "$T/bin/lsblk" <<'F'
+#!/bin/sh
+case "$*" in
+  *TYPE,RM,TRAN*) echo "disk 0 nvme" ;;
+  *-lnpo*NAME*)   printf '/dev/nvme0n1\n/dev/nvme0n1p1\n/dev/nvme0n1p3\n' ;;
+  *-srno*)        echo "sdz disk" ;;
+  *) exit 0 ;;
+esac
+F
+  printf '#!/bin/sh\nexit 0\n' > "$T/bin/findmnt"
+  printf '#!/bin/sh\n[ "$4" = /dev/nvme0n1p3 ] && echo "  ubuntu-vg"\nexit 0\n' > "$T/bin/pvs"
+  chmod +x "$T/bin/lsblk" "$T/bin/findmnt" "$T/bin/pvs"
+  PATH="$T/bin:$PATH" TVBOX_DRY_RUN=1 TVBOX_CONFIRM_WIPE=/dev/nvme0n1 \
+    run bash -c ". '$REPO/autoinstall/arch/disk.sh'; arch_disk_prepare /dev/nvme0n1 /mnt"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  a="$(echo "$output" | grep -n 'DRY: vgchange -an ubuntu-vg' | head -1 | cut -d: -f1)"
+  b="$(echo "$output" | grep -n 'DRY: wipefs -a' | head -1 | cut -d: -f1)"
+  [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ]
+  [[ "$output" == *"DRY: umount -R /dev/nvme0n1p1"* ]]
+}
