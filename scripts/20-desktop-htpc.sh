@@ -16,6 +16,8 @@ if [ "${PKG_FAMILY:-debian}" = arch ]; then
     sed -i -E '/^\[multilib\]/,+1 s|^[[:space:]]*#[[:space:]]*(Include[[:space:]]*=)|\1|' "$pacman_conf"
     pkg_update
   fi
+  # steam needs a lib32 Vulkan driver; name the right one so --noconfirm does not pick an arbitrary provider
+  pkg_install_optional lib32-mesa lib32-vulkan-radeon
   pkg_install_optional pipewire wireplumber pipewire-pulse bluez bluez-utils flatpak mpv firefox \
     yt-dlp libcec plasma-nm plasma-pa powerdevil kscreen konsole kodi-addon-pvr-iptvsimple \
     steam sunshine waydroid gamescope

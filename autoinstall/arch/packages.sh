@@ -48,6 +48,12 @@ arch_base_packages() {
     avahi
     nss-mdns
     ufw
+    cachyos-keyring
+    cachyos-mirrorlist
+    cachyos-v3-mirrorlist
+    cachyos-settings
+    fuse3
+    vulkan-radeon
   )
   if [ "${TVBOX_GPU:-}" = nvidia ]; then
     # exact name from the CachyOS repo (DKMS module, builds against linux-cachyos)

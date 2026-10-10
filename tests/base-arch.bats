@@ -36,7 +36,19 @@ FAKE
 #!/usr/bin/env bash
 exit 0
 FAKE
-  chmod +x "$T/bin/pacman" "$T/bin/apt-get" "$T/bin/systemctl" "$T/bin/hostnamectl"
+  # no network in tests: curl serves a fixture tarball for the mergerfs download (when FAKE_CURL_TGZ is set), else fails
+  cat >"$T/bin/curl" <<'FAKE'
+#!/usr/bin/env bash
+out=""; url=""
+while [ $# -gt 0 ]; do case "$1" in -o) out=$2; shift 2 ;; -m|--retry) shift 2 ;; -*) shift ;; *) url=$1; shift ;; esac; done
+case "$url" in
+  *api.github.com*) [ -n "${FAKE_CURL_TGZ:-}" ] && echo '{"tag_name": "9.9.9"}'; exit 0 ;;
+  *releases/download/9.9.9/*) [ -n "${FAKE_CURL_TGZ:-}" ] && [ -n "$out" ] && cp "$FAKE_CURL_TGZ" "$out" && exit 0 ;;
+esac
+exit 1
+FAKE
+  chmod +x "$T/bin/pacman" "$T/bin/apt-get" "$T/bin/systemctl" "$T/bin/hostnamectl" "$T/bin/curl"
+  export TVBOX_LOCAL_PREFIX="$T/local"
   export PACMAN_LOG="$T/pacman.log" APT_LOG="$T/apt.log"
   : >"$PACMAN_LOG"; : >"$APT_LOG"
   export PATH="$T/bin:$PATH" PKG_FAMILY=arch TVBOX_TEST_NOROOT=1
@@ -60,4 +72,19 @@ teardown() { rm -rf "$T"; }
 
 @test "debian: the apt package list is untouched" {
   grep -q 'apt_install ca-certificates curl git jq rsync file attr parted e2fsprogs util-linux' "$REPO/scripts/10-base.sh"
+}
+
+@test "arch: mergerfs (AUR-only) comes from the upstream static release into the local prefix" {
+  mkdir -p "$T/fix/usr/local/bin"; printf '#!/bin/sh\necho mergerfs\n' > "$T/fix/usr/local/bin/mergerfs"
+  printf '#!/bin/sh\n' > "$T/fix/usr/local/bin/mergerfs-fusermount"
+  tar -czf "$T/m.tgz" -C "$T/fix" usr
+  FAKE_CURL_TGZ="$T/m.tgz" PKG_FAMILY=arch PATH="$T/bin:$PATH" run bash "$REPO/scripts/10-base.sh"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [ -x "$T/local/bin/mergerfs" ]; [ -x "$T/local/bin/mergerfs-fusermount" ]
+  grep -qx 'fuse3' <(tr ' ' '\n' < "$PACMAN_LOG") || grep -q 'fuse3' "$PACMAN_LOG"
+}
+@test "arch: a failed mergerfs download warns but does not abort the base setup" {
+  PKG_FAMILY=arch PATH="$T/bin:$PATH" run bash "$REPO/scripts/10-base.sh"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [[ "$output" == *"could not install mergerfs"* ]]
 }

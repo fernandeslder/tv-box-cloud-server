@@ -11,7 +11,27 @@ if [ "${PKG_FAMILY:-debian}" = arch ]; then
   pkg_install ca-certificates curl git jq rsync file attr parted e2fsprogs util-linux \
     smartmontools restic rclone samba avahi nss-mdns qrencode ufw htop \
     python tesseract poppler ffmpeg openssl unzip binutils bind iproute2 imagemagick
-  pkg_install_optional mergerfs wsdd2
+  pkg_install fuse3
+  pkg_install_optional wsdd2
+  # mergerfs is AUR-only on Arch/CachyOS: without it disks.sh cannot mount the pool. Use the upstream static
+  # release (same idea as the yt-dlp binary); TVBOX_LOCAL_PREFIX relocates it for tests.
+  if ! command -v mergerfs >/dev/null 2>&1; then
+    prefix="${TVBOX_LOCAL_PREFIX:-/usr/local}"
+    mtmp="$(mktemp -d)"
+    mver="$(curl -fsSL -m 30 https://api.github.com/repos/trapexit/mergerfs/releases/latest 2>/dev/null | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1)"
+    mver="${mver:-2.42.0}"
+    if curl -fsSL -m 240 --retry 3 -o "$mtmp/mergerfs.tgz" \
+         "https://github.com/trapexit/mergerfs/releases/download/$mver/mergerfs-$mver-static-linux_amd64.tar.gz" \
+       && tar -xzf "$mtmp/mergerfs.tgz" -C "$mtmp" && [ -f "$mtmp/usr/local/bin/mergerfs" ]; then
+      install -D -m 755 "$mtmp/usr/local/bin/mergerfs" "$prefix/bin/mergerfs"
+      [ ! -f "$mtmp/usr/local/bin/mergerfs-fusermount" ] \
+        || install -D -m 755 "$mtmp/usr/local/bin/mergerfs-fusermount" "$prefix/bin/mergerfs-fusermount"
+      log "mergerfs $mver installed to $prefix/bin"
+    else
+      warn "could not install mergerfs: the storage pool will not mount until you do"
+    fi
+    rm -rf "$mtmp"
+  fi
 else
   apt-get update -qq
   apt_install ca-certificates curl git jq rsync file attr parted e2fsprogs util-linux \

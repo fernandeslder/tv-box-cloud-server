@@ -119,6 +119,14 @@ mapfile -t PKGS < <(arch_base_packages)
 [ "${#PKGS[@]}" -gt 0 ] || die "arch_base_packages listed no packages"
 run pacstrap -K "$MOUNT" "${PKGS[@]}"
 
+# The installed system must keep the CachyOS repos: pacstrap leaves it with the stock pacman.conf, so
+# linux-cachyos and the optimized packages would never update. Copy what the live repo setup produced.
+run install -Dm644 /etc/pacman.conf "$MOUNT/etc/pacman.conf"
+for ml in /etc/pacman.d/cachyos*mirrorlist; do
+  [ -e "$ml" ] || [ "$DRY" = 1 ] || continue
+  run install -Dm644 "$ml" "$MOUNT$ml"
+done
+
 # genfstab writes the installed system's fstab (redirection, so it runs via bash -c)
 run bash -c "genfstab -U $MOUNT > $MOUNT/etc/fstab"
 
